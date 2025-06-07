@@ -1,0 +1,24 @@
+services:
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./api:/api
+    environment:
+      - WATCHFILES_FORCE_POLLING=true # ホットリロードのための設定
+      - PYTHONPATH=/api/src # 絶対インポートのためのPythonパス設定
+    depends_on:
+      - postgres
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: mydb
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_HOST_AUTH_METHOD: trust
+      TZ: 'Asia/Tokyo'
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./postgres:/var/lib/postgresql/data
