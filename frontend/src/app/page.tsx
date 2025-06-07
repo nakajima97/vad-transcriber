@@ -1,5 +1,6 @@
 'use client';
 
+import { AudioRecorder } from '@/components/AudioRecorder';
 import { Badge } from '@/components/shadcn/ui/badge';
 import { Button } from '@/components/shadcn/ui/button';
 import {
@@ -27,14 +28,11 @@ import {
   Languages,
   Mic,
   Settings,
-  Square,
   Trash2,
   User,
   Volume2,
-  Wifi,
-  WifiOff,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 type TranscriptionResult = {
   id: string;
@@ -52,96 +50,24 @@ type VADResult = {
 };
 
 export default function VADTranscriberApp() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [audioLevel, setAudioLevel] = useState(0);
   const [transcriptionResults, setTranscriptionResults] = useState<
     TranscriptionResult[]
   >([]);
   const [vadResults, setVadResults] = useState<VADResult[]>([]);
-  const [sessionTime, setSessionTime] = useState(0);
   const [selectedLanguage, setSelectedLanguage] = useState('ja');
   const [vadSensitivity, setVadSensitivity] = useState(0.5);
 
-  const audioLevelInterval = useRef<NodeJS.Timeout | null>(null);
-  const sessionTimeInterval = useRef<NodeJS.Timeout | null>(null);
-
-  // モックデータでデモ機能をシミュレート
-  useEffect(() => {
-    if (isRecording && isConnected) {
-      // 音声レベルをシミュレート
-      audioLevelInterval.current = setInterval(() => {
-        setAudioLevel(Math.random() * 100);
-      }, 100);
-
-      // セッション時間をカウント
-      sessionTimeInterval.current = setInterval(() => {
-        setSessionTime((prev) => prev + 1);
-      }, 1000);
-
-      // VAD結果をシミュレート
-      const vadInterval = setInterval(() => {
-        const isVoiceActive = Math.random() > 0.6;
-        const newVadResult: VADResult = {
-          is_speech: isVoiceActive,
-          confidence: 0.7 + Math.random() * 0.3,
-          timestamp: new Date().toISOString(),
-        };
-        setVadResults((prev) => [...prev.slice(-10), newVadResult]);
-
-        // 発話が検出された場合、文字起こし結果を追加
-        if (isVoiceActive && Math.random() > 0.7) {
-          const mockTexts = [
-            'こんにちは、これはテストです。',
-            'リアルタイム文字起こしが動作しています。',
-            '音声認識の精度が向上しています。',
-            'VADが正常に動作しています。',
-            'システムが安定して動作中です。',
-          ];
-
-          const newResult: TranscriptionResult = {
-            id: Date.now().toString(),
-            text: mockTexts[Math.floor(Math.random() * mockTexts.length)],
-            confidence: 0.85 + Math.random() * 0.15,
-            timestamp: new Date().toISOString(),
-            is_final: Math.random() > 0.3,
-            speaker: Math.random() > 0.7 ? '話者1' : undefined,
-          };
-
-          setTranscriptionResults((prev) => [...prev, newResult]);
-        }
-      }, 2000);
-
-      return () => {
-        clearInterval(vadInterval);
-      };
-    }
-
-    if (audioLevelInterval.current) clearInterval(audioLevelInterval.current);
-    if (sessionTimeInterval.current) clearInterval(sessionTimeInterval.current);
-    setAudioLevel(0);
-  }, [isRecording, isConnected]);
-
-  const handleStartRecording = () => {
-    setIsConnected(true);
-    setIsRecording(true);
-    setSessionTime(0);
+  const handleTranscriptionResult = (result: TranscriptionResult) => {
+    setTranscriptionResults((prev) => [...prev, result]);
   };
 
-  const handleStopRecording = () => {
-    setIsRecording(false);
-    setIsConnected(false);
+  const handleVADResult = (result: VADResult) => {
+    setVadResults((prev) => [...prev.slice(-10), result]);
   };
 
   const handleClearTranscription = () => {
     setTranscriptionResults([]);
     setVadResults([]);
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -164,18 +90,7 @@ export default function VADTranscriberApp() {
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge
-                variant={isConnected ? 'default' : 'secondary'}
-                className="flex items-center gap-1"
-              >
-                {isConnected ? (
-                  <Wifi className="w-3 h-3" />
-                ) : (
-                  <WifiOff className="w-3 h-3" />
-                )}
-                {isConnected ? '接続中' : '切断'}
-              </Badge>
-              <Badge variant="outline">静的版</Badge>
+              <Badge variant="outline">リアルタイム版</Badge>
             </div>
           </div>
         </div>
@@ -183,97 +98,50 @@ export default function VADTranscriberApp() {
 
       <main className="container mx-auto px-4 py-8">
         {/* メイン制御パネル */}
-        <Card className="mb-8 bg-white dark:bg-slate-800 border-0 shadow-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Volume2 className="w-5 h-5 text-blue-600" />
-              録音制御
-            </CardTitle>
-            <CardDescription>
-              音声の録音と文字起こしをコントロールします
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* 録音ボタンとステータス */}
-            <div className="flex items-center justify-center space-x-4">
-              <Button
-                size="lg"
-                onClick={
-                  isRecording ? handleStopRecording : handleStartRecording
-                }
-                className={`w-32 h-32 rounded-full text-lg font-semibold transition-all ${
-                  isRecording
-                    ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
-                    : 'bg-blue-500 hover:bg-blue-600 text-white'
-                }`}
-              >
-                {isRecording ? (
-                  <div className="flex flex-col items-center">
-                    <Square className="w-8 h-8 mb-2" />
-                    停止
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center">
-                    <Mic className="w-8 h-8 mb-2" />
-                    開始
-                  </div>
-                )}
-              </Button>
+        <div className="mb-8">
+          <AudioRecorder
+            websocketUrl="ws://localhost:8000/ws"
+            onTranscriptionResult={handleTranscriptionResult}
+            onVADResult={handleVADResult}
+          />
+        </div>
+
+        {/* 統計情報 */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="flex items-center space-x-3 p-4 bg-white dark:bg-slate-800 rounded-lg shadow-lg">
+            <Eye className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+            <div>
+              <p className="text-sm font-medium text-slate-900 dark:text-white">
+                認識結果
+              </p>
+              <p className="text-lg font-bold text-green-600">
+                {transcriptionResults.length}件
+              </p>
             </div>
+          </div>
 
-            {/* セッション情報 */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="flex items-center space-x-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                <Clock className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                <div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">
-                    録音時間
-                  </p>
-                  <p className="text-lg font-bold text-blue-600">
-                    {formatTime(sessionTime)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                <Eye className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                <div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">
-                    認識結果
-                  </p>
-                  <p className="text-lg font-bold text-green-600">
-                    {transcriptionResults.length}件
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                <Languages className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                <div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">
-                    言語
-                  </p>
-                  <p className="text-lg font-bold text-purple-600">日本語</p>
-                </div>
-              </div>
+          <div className="flex items-center space-x-3 p-4 bg-white dark:bg-slate-800 rounded-lg shadow-lg">
+            <Languages className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+            <div>
+              <p className="text-sm font-medium text-slate-900 dark:text-white">
+                言語
+              </p>
+              <p className="text-lg font-bold text-purple-600">日本語</p>
             </div>
+          </div>
 
-            {/* 音声レベルメーター */}
-            {isRecording && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-900 dark:text-white">
-                    音声レベル
-                  </span>
-                  <span className="text-sm text-slate-600 dark:text-slate-400">
-                    {Math.round(audioLevel)}%
-                  </span>
-                </div>
-                <Progress value={audioLevel} className="w-full" />
-              </div>
-            )}
-          </CardContent>
-        </Card>
+          <div className="flex items-center space-x-3 p-4 bg-white dark:bg-slate-800 rounded-lg shadow-lg">
+            <Volume2 className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+            <div>
+              <p className="text-sm font-medium text-slate-900 dark:text-white">
+                VAD検出
+              </p>
+              <p className="text-lg font-bold text-blue-600">
+                {vadResults.length}回
+              </p>
+            </div>
+          </div>
+        </div>
 
         {/* タブセクション */}
         <Tabs defaultValue="transcription" className="space-y-6">
