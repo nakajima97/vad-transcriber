@@ -22,13 +22,13 @@ interface AudioRecorderActions {
 }
 
 export const useAudioRecorder = (
-  options: AudioRecorderOptions = {}
+  options: AudioRecorderOptions = {},
 ): AudioRecorderState & AudioRecorderActions => {
   const {
     websocketUrl = 'ws://localhost:8000/ws',
     sampleRate = 16000,
     channels = 1,
-    bufferSize = 4096
+    bufferSize = 4096,
   } = options;
 
   const [isRecording, setIsRecording] = useState(false);
@@ -52,7 +52,7 @@ export const useAudioRecorder = (
 
     try {
       websocketRef.current = new WebSocket(websocketUrl);
-      
+
       websocketRef.current.onopen = () => {
         console.log('WebSocket connected');
         setIsConnected(true);
@@ -75,14 +75,16 @@ export const useAudioRecorder = (
         try {
           const data = JSON.parse(event.data);
           console.log('Received message:', data);
-          
+
           // メッセージタイプに応じて処理
           switch (data.type) {
             case 'connection_established':
               console.log('WebSocket connection established:', data.message);
               break;
             case 'audio_received':
-              console.log(`Audio data received: ${data.data_size} bytes (packet #${data.packet_count})`);
+              console.log(
+                `Audio data received: ${data.data_size} bytes (packet #${data.packet_count})`,
+              );
               break;
             case 'statistics':
               console.log(`Statistics: ${data.total_packets} total packets`);
@@ -135,7 +137,7 @@ export const useAudioRecorder = (
     }
     const rms = Math.sqrt(sum / bufferLength);
     const level = (rms / 255) * 100;
-    
+
     setAudioLevel(level);
   }, []);
 
@@ -159,9 +161,10 @@ export const useAudioRecorder = (
 
       // AudioContextを設定
       audioContextRef.current = new AudioContext({ sampleRate });
-      sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
+      sourceRef.current =
+        audioContextRef.current.createMediaStreamSource(stream);
       analyserRef.current = audioContextRef.current.createAnalyser();
-      
+
       analyserRef.current.fftSize = 2048;
       sourceRef.current.connect(analyserRef.current);
 
@@ -192,10 +195,11 @@ export const useAudioRecorder = (
       // 定期的にデータを送信（100ms間隔）
       mediaRecorder.start(100);
       setIsRecording(true);
-
     } catch (err) {
       console.error('Failed to start recording:', err);
-      setError(err instanceof Error ? err.message : 'Failed to access microphone');
+      setError(
+        err instanceof Error ? err.message : 'Failed to access microphone',
+      );
     }
   }, [sampleRate, channels, sendAudioData, analyzeAudioLevel]);
 
@@ -203,12 +207,17 @@ export const useAudioRecorder = (
   const stopRecording = useCallback(() => {
     setIsRecording(false);
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== 'inactive'
+    ) {
       mediaRecorderRef.current.stop();
     }
 
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      for (const track of streamRef.current.getTracks()) {
+        track.stop();
+      }
       streamRef.current = null;
     }
 
@@ -246,4 +255,4 @@ export const useAudioRecorder = (
     connect,
     disconnect,
   };
-}; 
+};

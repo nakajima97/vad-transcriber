@@ -1,6 +1,8 @@
 'use client';
 
 import { useAudioRecorder } from '@/lib/useAudioRecorder';
+import { AlertCircle, Mic, Square, Volume2, Wifi, WifiOff } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Badge } from './shadcn/ui/badge';
 import { Button } from './shadcn/ui/button';
 import {
@@ -11,20 +13,26 @@ import {
   CardTitle,
 } from './shadcn/ui/card';
 import { Progress } from './shadcn/ui/progress';
-import {
-  AlertCircle,
-  Mic,
-  Square,
-  Volume2,
-  Wifi,
-  WifiOff,
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
+
+type TranscriptionResult = {
+  id: string;
+  text: string;
+  confidence: number;
+  timestamp: string;
+  is_final: boolean;
+  speaker?: string;
+};
+
+type VADResult = {
+  is_speech: boolean;
+  confidence: number;
+  timestamp: string;
+};
 
 interface AudioRecorderProps {
   websocketUrl?: string;
-  onTranscriptionResult?: (result: any) => void;
-  onVADResult?: (result: any) => void;
+  onTranscriptionResult?: (result: TranscriptionResult) => void;
+  onVADResult?: (result: VADResult) => void;
 }
 
 export function AudioRecorder({
@@ -48,10 +56,10 @@ export function AudioRecorder({
   // セッション時間のカウント
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
-    
+
     if (isRecording) {
       interval = setInterval(() => {
-        setSessionTime(prev => prev + 1);
+        setSessionTime((prev) => prev + 1);
       }, 1000);
     } else {
       setSessionTime(0);
@@ -62,11 +70,7 @@ export function AudioRecorder({
     };
   }, [isRecording]);
 
-  // WebSocketメッセージの処理（将来の拡張用）
-  useEffect(() => {
-    // ここでWebSocketからのメッセージを処理
-    // 例：転写結果やVAD結果を受信
-  }, [onTranscriptionResult, onVADResult]);
+  // WebSocketメッセージの処理は将来的にuseAudioRecorderフック内で実装
 
   const handleStartRecording = async () => {
     if (!isConnected) {
@@ -148,9 +152,10 @@ export function AudioRecorder({
             onClick={isRecording ? handleStopRecording : handleStartRecording}
             className={`
               w-32 h-32 rounded-full transition-all duration-300 
-              ${isRecording 
-                ? 'bg-red-500 hover:bg-red-600 animate-pulse shadow-lg shadow-red-200' 
-                : 'bg-blue-500 hover:bg-blue-600 shadow-lg shadow-blue-200'
+              ${
+                isRecording
+                  ? 'bg-red-500 hover:bg-red-600 animate-pulse shadow-lg shadow-red-200'
+                  : 'bg-blue-500 hover:bg-blue-600 shadow-lg shadow-blue-200'
               }
             `}
             disabled={!isConnected && isRecording}
@@ -180,28 +185,33 @@ export function AudioRecorder({
             <span>音声レベル</span>
             <span>{Math.round(audioLevel)}%</span>
           </div>
-          <Progress 
-            value={audioLevel} 
-            className="w-full h-2"
-          />
+          <Progress value={audioLevel} className="w-full h-2" />
         </div>
 
         {/* 録音設定 */}
         <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 dark:bg-slate-700 rounded-lg text-sm">
           <div>
-            <span className="text-slate-600 dark:text-slate-400">サンプルレート:</span>
+            <span className="text-slate-600 dark:text-slate-400">
+              サンプルレート:
+            </span>
             <span className="ml-2 font-medium">16kHz</span>
           </div>
           <div>
-            <span className="text-slate-600 dark:text-slate-400">チャンネル:</span>
+            <span className="text-slate-600 dark:text-slate-400">
+              チャンネル:
+            </span>
             <span className="ml-2 font-medium">モノラル</span>
           </div>
           <div>
-            <span className="text-slate-600 dark:text-slate-400">フォーマット:</span>
+            <span className="text-slate-600 dark:text-slate-400">
+              フォーマット:
+            </span>
             <span className="ml-2 font-medium">WebM/Opus</span>
           </div>
           <div>
-            <span className="text-slate-600 dark:text-slate-400">送信間隔:</span>
+            <span className="text-slate-600 dark:text-slate-400">
+              送信間隔:
+            </span>
             <span className="ml-2 font-medium">100ms</span>
           </div>
         </div>
@@ -215,4 +225,4 @@ export function AudioRecorder({
       </CardContent>
     </Card>
   );
-} 
+}
