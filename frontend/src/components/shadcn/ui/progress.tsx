@@ -1,21 +1,21 @@
-import * as React from "react"
-import { cn } from "@/lib/shadcn/utils"
+import { cn } from '@/lib/shadcn/utils';
+import * as React from 'react';
 
 interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
-  value?: number
-  max?: number
+  value?: number;
+  max?: number;
 }
 
 const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
   ({ className, value = 0, max = 100, ...props }, ref) => {
-    const percentage = Math.min(Math.max((value / max) * 100, 0), 100)
+    const percentage = Math.min(Math.max((value / max) * 100, 0), 100);
 
     return (
       <div
         ref={ref}
         className={cn(
-          "relative h-4 w-full overflow-hidden rounded-full bg-secondary",
-          className
+          'relative h-4 w-full overflow-hidden rounded-full bg-secondary',
+          className,
         )}
         {...props}
       >
@@ -24,9 +24,9 @@ const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
           style={{ width: `${percentage}%` }}
         />
       </div>
-    )
-  }
-)
-Progress.displayName = "Progress"
+    );
+  },
+);
+Progress.displayName = 'Progress';
 
-export { Progress } 
+export { Progress };

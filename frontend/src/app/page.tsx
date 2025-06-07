@@ -1,135 +1,148 @@
-"use client"
+'use client';
 
-import { useState, useEffect, useRef } from "react"
-import { Button } from "@/components/shadcn/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/shadcn/ui/card"
-import { Badge } from "@/components/shadcn/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/shadcn/ui/tabs"
-import { Progress } from "@/components/shadcn/ui/progress"
+import { Badge } from '@/components/shadcn/ui/badge';
+import { Button } from '@/components/shadcn/ui/button';
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/shadcn/ui/card';
+import { Progress } from '@/components/shadcn/ui/progress';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/shadcn/ui/tabs';
+import {
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Copy,
+  Download,
+  Eye,
+  Info,
+  Languages,
   Mic,
-  Square,
   Settings,
+  Square,
+  Trash2,
+  User,
   Volume2,
   Wifi,
   WifiOff,
-  Eye,
-  Clock,
-  User,
-  Languages,
-  Download,
-  Trash2,
-  Copy,
-  CheckCircle,
-  AlertCircle,
-  Info
-} from "lucide-react"
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 type TranscriptionResult = {
-  id: string
-  text: string
-  confidence: number
-  timestamp: string
-  is_final: boolean
-  speaker?: string
-}
+  id: string;
+  text: string;
+  confidence: number;
+  timestamp: string;
+  is_final: boolean;
+  speaker?: string;
+};
 
 type VADResult = {
-  is_speech: boolean
-  confidence: number
-  timestamp: string
-}
+  is_speech: boolean;
+  confidence: number;
+  timestamp: string;
+};
 
 export default function VADTranscriberApp() {
-  const [isRecording, setIsRecording] = useState(false)
-  const [isConnected, setIsConnected] = useState(false)
-  const [audioLevel, setAudioLevel] = useState(0)
-  const [transcriptionResults, setTranscriptionResults] = useState<TranscriptionResult[]>([])
-  const [vadResults, setVadResults] = useState<VADResult[]>([])
-  const [sessionTime, setSessionTime] = useState(0)
-  const [selectedLanguage, setSelectedLanguage] = useState("ja")
-  const [vadSensitivity, setVadSensitivity] = useState(0.5)
+  const [isRecording, setIsRecording] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [transcriptionResults, setTranscriptionResults] = useState<
+    TranscriptionResult[]
+  >([]);
+  const [vadResults, setVadResults] = useState<VADResult[]>([]);
+  const [sessionTime, setSessionTime] = useState(0);
+  const [selectedLanguage, setSelectedLanguage] = useState('ja');
+  const [vadSensitivity, setVadSensitivity] = useState(0.5);
 
-  const audioLevelInterval = useRef<NodeJS.Timeout | null>(null)
-  const sessionTimeInterval = useRef<NodeJS.Timeout | null>(null)
+  const audioLevelInterval = useRef<NodeJS.Timeout | null>(null);
+  const sessionTimeInterval = useRef<NodeJS.Timeout | null>(null);
 
   // モックデータでデモ機能をシミュレート
   useEffect(() => {
     if (isRecording && isConnected) {
       // 音声レベルをシミュレート
       audioLevelInterval.current = setInterval(() => {
-        setAudioLevel(Math.random() * 100)
-      }, 100)
+        setAudioLevel(Math.random() * 100);
+      }, 100);
 
       // セッション時間をカウント
       sessionTimeInterval.current = setInterval(() => {
-        setSessionTime(prev => prev + 1)
-      }, 1000)
+        setSessionTime((prev) => prev + 1);
+      }, 1000);
 
       // VAD結果をシミュレート
       const vadInterval = setInterval(() => {
-        const isVoiceActive = Math.random() > 0.6
+        const isVoiceActive = Math.random() > 0.6;
         const newVadResult: VADResult = {
           is_speech: isVoiceActive,
           confidence: 0.7 + Math.random() * 0.3,
-          timestamp: new Date().toISOString()
-        }
-        setVadResults(prev => [...prev.slice(-10), newVadResult])
+          timestamp: new Date().toISOString(),
+        };
+        setVadResults((prev) => [...prev.slice(-10), newVadResult]);
 
         // 発話が検出された場合、文字起こし結果を追加
         if (isVoiceActive && Math.random() > 0.7) {
           const mockTexts = [
-            "こんにちは、これはテストです。",
-            "リアルタイム文字起こしが動作しています。",
-            "音声認識の精度が向上しています。",
-            "VADが正常に動作しています。",
-            "システムが安定して動作中です。"
-          ]
-          
+            'こんにちは、これはテストです。',
+            'リアルタイム文字起こしが動作しています。',
+            '音声認識の精度が向上しています。',
+            'VADが正常に動作しています。',
+            'システムが安定して動作中です。',
+          ];
+
           const newResult: TranscriptionResult = {
             id: Date.now().toString(),
             text: mockTexts[Math.floor(Math.random() * mockTexts.length)],
             confidence: 0.85 + Math.random() * 0.15,
             timestamp: new Date().toISOString(),
             is_final: Math.random() > 0.3,
-            speaker: Math.random() > 0.7 ? "話者1" : undefined
-          }
-          
-          setTranscriptionResults(prev => [...prev, newResult])
+            speaker: Math.random() > 0.7 ? '話者1' : undefined,
+          };
+
+          setTranscriptionResults((prev) => [...prev, newResult]);
         }
-      }, 2000)
+      }, 2000);
 
       return () => {
-        clearInterval(vadInterval)
-      }
-    } else {
-      if (audioLevelInterval.current) clearInterval(audioLevelInterval.current)
-      if (sessionTimeInterval.current) clearInterval(sessionTimeInterval.current)
-      setAudioLevel(0)
+        clearInterval(vadInterval);
+      };
     }
-  }, [isRecording, isConnected])
+
+    if (audioLevelInterval.current) clearInterval(audioLevelInterval.current);
+    if (sessionTimeInterval.current) clearInterval(sessionTimeInterval.current);
+    setAudioLevel(0);
+  }, [isRecording, isConnected]);
 
   const handleStartRecording = () => {
-    setIsConnected(true)
-    setIsRecording(true)
-    setSessionTime(0)
-  }
+    setIsConnected(true);
+    setIsRecording(true);
+    setSessionTime(0);
+  };
 
   const handleStopRecording = () => {
-    setIsRecording(false)
-    setIsConnected(false)
-  }
+    setIsRecording(false);
+    setIsConnected(false);
+  };
 
   const handleClearTranscription = () => {
-    setTranscriptionResults([])
-    setVadResults([])
-  }
+    setTranscriptionResults([]);
+    setVadResults([]);
+  };
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
@@ -151,9 +164,16 @@ export default function VADTranscriberApp() {
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge variant={isConnected ? "default" : "secondary"} className="flex items-center gap-1">
-                {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-                {isConnected ? "接続中" : "切断"}
+              <Badge
+                variant={isConnected ? 'default' : 'secondary'}
+                className="flex items-center gap-1"
+              >
+                {isConnected ? (
+                  <Wifi className="w-3 h-3" />
+                ) : (
+                  <WifiOff className="w-3 h-3" />
+                )}
+                {isConnected ? '接続中' : '切断'}
               </Badge>
               <Badge variant="outline">静的版</Badge>
             </div>
@@ -178,11 +198,13 @@ export default function VADTranscriberApp() {
             <div className="flex items-center justify-center space-x-4">
               <Button
                 size="lg"
-                onClick={isRecording ? handleStopRecording : handleStartRecording}
+                onClick={
+                  isRecording ? handleStopRecording : handleStartRecording
+                }
                 className={`w-32 h-32 rounded-full text-lg font-semibold transition-all ${
-                  isRecording 
-                    ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" 
-                    : "bg-blue-500 hover:bg-blue-600 text-white"
+                  isRecording
+                    ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
+                    : 'bg-blue-500 hover:bg-blue-600 text-white'
                 }`}
               >
                 {isRecording ? (
@@ -204,23 +226,33 @@ export default function VADTranscriberApp() {
               <div className="flex items-center space-x-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg">
                 <Clock className="w-5 h-5 text-slate-600 dark:text-slate-400" />
                 <div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">録音時間</p>
-                  <p className="text-lg font-bold text-blue-600">{formatTime(sessionTime)}</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">
+                    録音時間
+                  </p>
+                  <p className="text-lg font-bold text-blue-600">
+                    {formatTime(sessionTime)}
+                  </p>
                 </div>
               </div>
-              
+
               <div className="flex items-center space-x-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg">
                 <Eye className="w-5 h-5 text-slate-600 dark:text-slate-400" />
                 <div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">認識結果</p>
-                  <p className="text-lg font-bold text-green-600">{transcriptionResults.length}件</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">
+                    認識結果
+                  </p>
+                  <p className="text-lg font-bold text-green-600">
+                    {transcriptionResults.length}件
+                  </p>
                 </div>
               </div>
-              
+
               <div className="flex items-center space-x-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg">
                 <Languages className="w-5 h-5 text-slate-600 dark:text-slate-400" />
                 <div>
-                  <p className="text-sm font-medium text-slate-900 dark:text-white">言語</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-white">
+                    言語
+                  </p>
                   <p className="text-lg font-bold text-purple-600">日本語</p>
                 </div>
               </div>
@@ -230,8 +262,12 @@ export default function VADTranscriberApp() {
             {isRecording && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-900 dark:text-white">音声レベル</span>
-                  <span className="text-sm text-slate-600 dark:text-slate-400">{Math.round(audioLevel)}%</span>
+                  <span className="text-sm font-medium text-slate-900 dark:text-white">
+                    音声レベル
+                  </span>
+                  <span className="text-sm text-slate-600 dark:text-slate-400">
+                    {Math.round(audioLevel)}%
+                  </span>
                 </div>
                 <Progress value={audioLevel} className="w-full" />
               </div>
@@ -253,10 +289,16 @@ export default function VADTranscriberApp() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>リアルタイム文字起こし</CardTitle>
-                  <CardDescription>音声認識の結果がリアルタイムで表示されます</CardDescription>
+                  <CardDescription>
+                    音声認識の結果がリアルタイムで表示されます
+                  </CardDescription>
                 </div>
                 <div className="flex space-x-2">
-                  <Button variant="outline" size="sm" onClick={handleClearTranscription}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClearTranscription}
+                  >
                     <Trash2 className="w-4 h-4 mr-2" />
                     クリア
                   </Button>
@@ -278,9 +320,9 @@ export default function VADTranscriberApp() {
                       <div
                         key={result.id}
                         className={`p-4 rounded-lg border-l-4 ${
-                          result.is_final 
-                            ? "border-green-500 bg-green-50 dark:bg-green-900/20" 
-                            : "border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20"
+                          result.is_final
+                            ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                            : 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
                         }`}
                       >
                         <div className="flex items-start justify-between">
@@ -291,7 +333,9 @@ export default function VADTranscriberApp() {
                             <div className="flex items-center space-x-4 mt-2 text-sm text-slate-600 dark:text-slate-400">
                               <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
-                                {new Date(result.timestamp).toLocaleTimeString('ja-JP')}
+                                {new Date(result.timestamp).toLocaleTimeString(
+                                  'ja-JP',
+                                )}
                               </span>
                               {result.speaker && (
                                 <span className="flex items-center gap-1">
@@ -338,17 +382,23 @@ export default function VADTranscriberApp() {
                   {/* 現在のVAD状態 */}
                   <div className="p-4 bg-slate-50 dark:bg-slate-700 rounded-lg">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-slate-900 dark:text-white">現在の状態</span>
+                      <span className="text-sm font-medium text-slate-900 dark:text-white">
+                        現在の状態
+                      </span>
                       <div className="flex items-center space-x-2">
-                        <div 
+                        <div
                           className={`w-3 h-3 rounded-full ${
-                            vadResults.length > 0 && vadResults[vadResults.length - 1]?.is_speech 
-                              ? 'bg-green-500 animate-pulse' 
+                            vadResults.length > 0 &&
+                            vadResults[vadResults.length - 1]?.is_speech
+                              ? 'bg-green-500 animate-pulse'
                               : 'bg-slate-400'
                           }`}
                         />
                         <span className="text-sm text-slate-600 dark:text-slate-400">
-                          {vadResults.length > 0 && vadResults[vadResults.length - 1]?.is_speech ? '発話中' : '無音'}
+                          {vadResults.length > 0 &&
+                          vadResults[vadResults.length - 1]?.is_speech
+                            ? '発話中'
+                            : '無音'}
                         </span>
                       </div>
                     </div>
@@ -362,24 +412,38 @@ export default function VADTranscriberApp() {
                         <p>録音開始後、VAD状態がここに表示されます</p>
                       </div>
                     ) : (
-                      vadResults.slice(-10).reverse().map((vad, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            <div 
-                              className={`w-2 h-2 rounded-full ${
-                                vad.is_speech ? 'bg-green-500' : 'bg-slate-400'
-                              }`}
-                            />
-                            <span className="text-sm font-medium text-slate-900 dark:text-white">
-                              {vad.is_speech ? '発話検出' : '無音'}
-                            </span>
+                      vadResults
+                        .slice(-10)
+                        .reverse()
+                        .map((vad) => (
+                          <div
+                            key={vad.timestamp}
+                            className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700 rounded-lg"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div
+                                className={`w-2 h-2 rounded-full ${
+                                  vad.is_speech
+                                    ? 'bg-green-500'
+                                    : 'bg-slate-400'
+                                }`}
+                              />
+                              <span className="text-sm font-medium text-slate-900 dark:text-white">
+                                {vad.is_speech ? '発話検出' : '無音'}
+                              </span>
+                            </div>
+                            <div className="text-sm text-slate-600 dark:text-slate-400 space-x-4">
+                              <span>
+                                確信度: {Math.round(vad.confidence * 100)}%
+                              </span>
+                              <span>
+                                {new Date(vad.timestamp).toLocaleTimeString(
+                                  'ja-JP',
+                                )}
+                              </span>
+                            </div>
                           </div>
-                          <div className="text-sm text-slate-600 dark:text-slate-400 space-x-4">
-                            <span>確信度: {Math.round(vad.confidence * 100)}%</span>
-                            <span>{new Date(vad.timestamp).toLocaleTimeString('ja-JP')}</span>
-                          </div>
-                        </div>
-                      ))
+                        ))
                     )}
                   </div>
                 </div>
@@ -403,7 +467,7 @@ export default function VADTranscriberApp() {
                     <label className="text-sm font-medium text-slate-900 dark:text-white">
                       言語設定
                     </label>
-                    <select 
+                    <select
                       className="w-full mt-2 p-2 border rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
                       value={selectedLanguage}
                       onChange={(e) => setSelectedLanguage(e.target.value)}
@@ -413,7 +477,7 @@ export default function VADTranscriberApp() {
                       <option value="zh">中文</option>
                     </select>
                   </div>
-                  
+
                   <div>
                     <label className="text-sm font-medium text-slate-900 dark:text-white">
                       サンプリングレート
@@ -451,11 +515,13 @@ export default function VADTranscriberApp() {
                       max="1"
                       step="0.1"
                       value={vadSensitivity}
-                      onChange={(e) => setVadSensitivity(parseFloat(e.target.value))}
+                      onChange={(e) =>
+                        setVadSensitivity(Number.parseFloat(e.target.value))
+                      }
                       className="w-full"
                     />
                   </div>
-                  
+
                   <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
                     <div className="flex">
                       <Info className="w-4 h-4 text-blue-600 mt-0.5 mr-2 flex-shrink-0" />
@@ -473,5 +539,5 @@ export default function VADTranscriberApp() {
         </Tabs>
       </main>
     </div>
-  )
+  );
 }
