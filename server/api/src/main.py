@@ -13,7 +13,10 @@ app = FastAPI(
 # CORS設定（フロントエンドからのアクセスを許可）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # Next.jsデフォルトポート
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],  # Next.jsデフォルトポート
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -25,7 +28,7 @@ def read_root():
     return {
         "message": "VAD Transcriber API",
         "status": "running",
-        "websocket_endpoint": "/ws"
+        "websocket_endpoint": "/ws",
     }
 
 
