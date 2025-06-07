@@ -1,0 +1,49 @@
+# FastAPI レイヤードアーキテクチャ テンプレート - Cursor Rules
+
+## プロジェクト概要
+
+このプロジェクトは個人開発向けのFastAPIテンプレートリポジトリです。レイヤードアーキテクチャを採用し、適度な複雑さで拡張性を重視した設計になっています。
+
+## 開発環境
+
+- **コンテナ化**: 開発環境にはDockerを使用しています
+- **起動コマンド**: `docker-compose up -d`
+- **データベース**: PostgreSQL（docker-compose.yamlで管理）
+- **マイグレーション**: Alembic使用（`docker-compose exec api alembic upgrade head`）
+
+## ドキュメント参照
+
+**重要**: このプロジェクトを理解するためのドキュメントは `docs/` ディレクトリにすべて含まれています。
+
+- **最初に確認**: `docs/README.md` でドキュメント構成を把握
+- **アーキテクチャ理解**: `docs/directory-structure.md` と `docs/architecture-diagram.md`
+- **実装時**: 各層の責任分離とディレクトリ配置ルールを厳守
+
+## よくある質問への回答
+
+**Q: 外部API通信はどこに書く？**
+A: `adapters/` ディレクトリ。データベースアクセスは `repositories/` と明確に分離。
+
+**Q: `get_user_service` のような DI 関数はどこに？**
+A: `api/deps.py` にすべての依存性注入関数を配置。
+
+**Q: ビジネスロジックはどこに？**
+A: `services/` 層のみ。APIエンドポイントやリポジトリには含めない。
+
+**Q: 実装で迷った時は？**
+A: `docs/directory-structure.md` の各層の責任を確認してください。
+
+## 新機能追加時の手順
+
+1. `docs/directory-structure.md` で適切な配置場所を確認
+2. 対応する層（API/Service/Repository/Adapter）に実装
+3. `api/deps.py` に依存性注入を追加
+4. テストを各層ごとに作成
+5. 関連ドキュメントを更新
+
+## 注意事項
+
+- DDDの完全実装は避ける（個人開発には重すぎる）
+- レイヤーを跨ぐ実装は禁止
+- 外部依存は必ずアダプターパターンで抽象化
+- テスト時のモック化を常に考慮した設計 
