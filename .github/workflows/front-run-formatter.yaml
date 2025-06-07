@@ -1,7 +1,7 @@
 on: [pull_request]
 
 jobs:
-  run-lint:
+  front-run-formatter:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -18,5 +18,5 @@ jobs:
       - name: Install dependencies
         run: yarn install
 
-      - name: Run Lint
-        run: yarn lint
+      - name: Run formatter
+        run: yarn format

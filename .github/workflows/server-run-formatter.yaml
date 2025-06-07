@@ -1,7 +1,7 @@
 on: [pull_request]
 
 jobs:
-  run-api-test:
+  server-run-formatter:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -15,11 +15,11 @@ jobs:
         with:
           python-version: 3.12.2
 
-      - name: Install dependencies
+      - name: Install poetry
         run: |
           pip install uv
-          uv sync --frozen --no-dev
+          uv sync --frozen --no-install-project --no-dev
 
-      - name: Run API test
+      - name: Run Formatter
         run: |
-          uv run pytest
+          uv run ruff format --check

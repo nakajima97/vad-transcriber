@@ -1,11 +1,8 @@
 on: [pull_request]
 
 jobs:
-  run-formatter:
+  front-run-type-check:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./
     steps:
       - name: checkout
         uses: actions/checkout@v4
@@ -18,5 +15,5 @@ jobs:
       - name: Install dependencies
         run: yarn install
 
-      - name: Run formatter
-        run: yarn format
+      - name: Run type-check
+        run: yarn type-check

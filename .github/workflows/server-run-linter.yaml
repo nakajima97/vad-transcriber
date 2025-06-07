@@ -1,7 +1,7 @@
 on: [pull_request]
 
 jobs:
-  run-formatter:
+  server-run-linter:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -20,6 +20,6 @@ jobs:
           pip install uv
           uv sync --frozen --no-install-project --no-dev
 
-      - name: Run Formatter
+      - name: Run Linter
         run: |
-          uv run ruff format --check
+          uv run ruff check
