@@ -1,8 +1,7 @@
-import asyncio
 import json
 import logging
 import time
-from typing import Dict, Optional
+from typing import Dict
 
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState

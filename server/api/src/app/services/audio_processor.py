@@ -1,12 +1,10 @@
 import asyncio
-import io
 import logging
 import tempfile
 from typing import Optional
 
 import numpy as np
 import soundfile as sf
-import subprocess
 import os
 
 logger = logging.getLogger(__name__)
@@ -90,7 +88,7 @@ class AudioProcessor:
                 try:
                     os.unlink(temp_input_path)
                     os.unlink(temp_output_path)
-                except:
+                except OSError:
                     pass
 
         except Exception as e:
