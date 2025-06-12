@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,6 +23,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+logging.basicConfig(
+    level=logging.DEBUG,
+)
 
 @app.get("/")
 def read_root():
