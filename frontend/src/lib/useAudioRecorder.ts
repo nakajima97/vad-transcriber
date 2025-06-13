@@ -20,9 +20,7 @@ interface AudioRecorderActions {
 export const useAudioRecorder = (
   options: AudioRecorderOptions = {},
 ): AudioRecorderState & AudioRecorderActions => {
-  const {
-    websocketUrl = 'ws://localhost:8000/ws',
-  } = options;
+  const { websocketUrl = 'ws://localhost:8000/ws' } = options;
 
   const [isRecording, setIsRecording] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -114,12 +112,17 @@ export const useAudioRecorder = (
       const audioContext = new AudioContext({ sampleRate: 16000 });
       audioContextRef.current = audioContext;
       // AudioWorklet登録
-      const blob = new Blob([workletProcessorCode], { type: 'application/javascript' });
+      const blob = new Blob([workletProcessorCode], {
+        type: 'application/javascript',
+      });
       const url = URL.createObjectURL(blob);
       await audioContext.audioWorklet.addModule(url);
       URL.revokeObjectURL(url);
       // Workletノード作成
-      const workletNode = new AudioWorkletNode(audioContext, 'pcm-worklet-processor');
+      const workletNode = new AudioWorkletNode(
+        audioContext,
+        'pcm-worklet-processor',
+      );
       workletNodeRef.current = workletNode;
       // WorkletからPCMデータ受信→WebSocket送信
       workletNode.port.onmessage = (event) => {
@@ -135,7 +138,7 @@ export const useAudioRecorder = (
     } catch (err) {
       setError('Failed to start recording');
     }
-  }, [isConnected, connect, workletProcessorCode]);
+  }, [isConnected, connect]);
 
   // 録音停止
   const stopRecording = useCallback(() => {
