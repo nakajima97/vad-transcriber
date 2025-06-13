@@ -2,6 +2,7 @@ import json
 import logging
 import time
 import os
+import wave
 from typing import Dict
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -14,6 +15,16 @@ AUDIO_SEGMENTS_DIR = "audio_segments"
 os.makedirs(AUDIO_SEGMENTS_DIR, exist_ok=True)
 
 VAD_FRAME_SIZE = 512  # 16kHz, 16bit, モノラル: 512サンプル = 1024バイト
+SAMPLE_RATE = 16000
+CHANNELS = 1
+SAMPLE_WIDTH = 2  # 16bit
+
+def save_pcm_as_wav(pcm_bytes: bytes, filepath: str):
+    with wave.open(filepath, 'wb') as wf:
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(SAMPLE_WIDTH)
+        wf.setframerate(SAMPLE_RATE)
+        wf.writeframes(pcm_bytes)
 
 class ConnectionManager:
     """WebSocket接続を管理するクラス"""
@@ -47,10 +58,9 @@ class ConnectionManager:
         # 切断時にバッファが残っていれば保存
         if self.in_speech.get(client_id, False) and len(self.speech_buffer.get(client_id, b"")) > 0:
             self.segment_count[client_id] += 1
-            filename = f"segment_{self.segment_count[client_id]:04d}.pcm"
+            filename = f"segment_{self.segment_count[client_id]:04d}.wav"
             filepath = os.path.join(AUDIO_SEGMENTS_DIR, filename)
-            with open(filepath, "wb") as f:
-                f.write(self.speech_buffer[client_id])
+            save_pcm_as_wav(self.speech_buffer[client_id], filepath)
             logger.info(f"[VAD] (disconnect) Saved segment: {filename}")
         for d in [self.speech_buffer, self.in_speech, self.segment_count, self.pcm_buffer]:
             if client_id in d:
@@ -127,10 +137,9 @@ async def process_audio_data(audio_data: bytes, client_id: str):
             else:
                 if manager.in_speech.get(client_id, False) and len(manager.speech_buffer.get(client_id, b"")) > 0:
                     manager.segment_count[client_id] += 1
-                    filename = f"segment_{manager.segment_count[client_id]:04d}.pcm"
+                    filename = f"segment_{manager.segment_count[client_id]:04d}.wav"
                     filepath = os.path.join(AUDIO_SEGMENTS_DIR, filename)
-                    with open(filepath, "wb") as f:
-                        f.write(manager.speech_buffer[client_id])
+                    save_pcm_as_wav(manager.speech_buffer[client_id], filepath)
                     logger.info(f"[VAD] Saved segment: {filename}")
                     manager.speech_buffer[client_id].clear()
                 manager.in_speech[client_id] = False
