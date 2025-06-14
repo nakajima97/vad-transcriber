@@ -32,55 +32,51 @@
 git clone <repository-url>
 cd vad-transcriber
 
-# フロントエンドのセットアップ
+# フロントエンド依存インストール（手動）
 cd frontend
 yarn install
 
-# サーバーのセットアップ
+# サーバー依存インストール（手動）
 cd ../server/api
 curl -LsSf https://astral.sh/uv/install.sh | sh  # uv のインストール
 uv sync
 
-# データベースの起動
-cd ..
-docker-compose up -d
+# データベース・サーバー起動
+cd ../..
+make server-up
 ```
 
 ### 開発サーバーの起動
 
 ```bash
-# フロントエンド (http://localhost:3000)
-cd frontend
-yarn dev
+# フロントエンド
+make front-up
 
-# バックエンド (http://localhost:8000)
-cd server/api
-uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+# バックエンド（API含むサーバー全体）
+make server-up
 ```
 
 ## 🧪 テスト
 
 ```bash
 # フロントエンド
-cd frontend
-yarn test
-yarn lint
-yarn type-check
+make front-test
+make front-lint
+make front-tsc
 
 # サーバー
-cd server/api
-uv run pytest
-uv run ruff check .
+make server-test
+make server-lint
 ```
 
 ## 📦 ビルド
 
 ```bash
-# フロントエンド
+# フロントエンド（手動）
 cd frontend
 yarn build
 
-# Storybook
+# Storybook（手動）
 yarn build-storybook
 ```
 
