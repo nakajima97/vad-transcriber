@@ -57,16 +57,18 @@ class ConnectionManager:
     def disconnect(self, client_id: str):
         """クライアント接続を切断する"""
         logger.info(f"[Disconnect] Starting disconnect process for client {client_id}")
-        
+
         # 接続リストから削除
         if client_id in self.active_connections:
             del self.active_connections[client_id]
-            logger.info(f"[Disconnect] Removed client {client_id} from active connections")
-        
+            logger.info(
+                f"[Disconnect] Removed client {client_id} from active connections"
+            )
+
         # データカウンターを削除
         if client_id in self.audio_data_count:
             del self.audio_data_count[client_id]
-        
+
         # 切断時にバッファが残っていれば保存
         if (
             self.in_speech.get(client_id, False)
@@ -77,7 +79,7 @@ class ConnectionManager:
             filepath = os.path.join(AUDIO_SEGMENTS_DIR, filename)
             save_pcm_as_wav(self.speech_buffer[client_id], filepath)
             logger.info(f"[VAD] (disconnect) Saved segment: {filename}")
-        
+
         # 全てのバッファとステートを削除
         for d in [
             self.speech_buffer,
@@ -87,7 +89,7 @@ class ConnectionManager:
         ]:
             if client_id in d:
                 del d[client_id]
-        
+
         logger.info(f"[Disconnect] Client {client_id} disconnected and cleaned up")
 
     async def send_json_message(self, data: dict, client_id: str):
@@ -96,19 +98,29 @@ class ConnectionManager:
             websocket = self.active_connections[client_id]
             try:
                 message = json.dumps(data)
-                logger.info(f"[WebSocket] Sending message to client {client_id}: {data.get('type', 'unknown')}")
+                logger.info(
+                    f"[WebSocket] Sending message to client {client_id}: {data.get('type', 'unknown')}"
+                )
                 await websocket.send_text(message)
-                logger.info(f"[WebSocket] Message sent successfully to client {client_id}")
+                logger.info(
+                    f"[WebSocket] Message sent successfully to client {client_id}"
+                )
             except Exception as e:
-                logger.error(f"[WebSocket] Failed to send message to client {client_id}: {e}")
+                logger.error(
+                    f"[WebSocket] Failed to send message to client {client_id}: {e}"
+                )
                 logger.error(f"[WebSocket] WebSocket state: {websocket.state}")
                 # 接続が切れている場合は接続リストから削除
                 logger.warning(f"[WebSocket] Removing disconnected client {client_id}")
                 self.disconnect(client_id)
         else:
-            logger.warning(f"[WebSocket] Client {client_id} not found in active connections")
+            logger.warning(
+                f"[WebSocket] Client {client_id} not found in active connections"
+            )
 
-    async def send_transcription_result(self, text: str, client_id: str, segment_id: int):
+    async def send_transcription_result(
+        self, text: str, client_id: str, segment_id: int
+    ):
         """文字起こし結果をクライアントに送信"""
         logger.info(f"send_transcription_result: {text}")
         await self.send_json_message(
@@ -157,10 +169,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
             await process_audio_data(audio_data, client_id)
 
     except WebSocketDisconnect:
-        logger.info(f"[Connection] WebSocket disconnect detected for client {client_id}")
+        logger.info(
+            f"[Connection] WebSocket disconnect detected for client {client_id}"
+        )
         manager.disconnect(client_id)
     except Exception as e:
-        logger.error(f"[Connection] Error in websocket connection for client {client_id}: {e}")
+        logger.error(
+            f"[Connection] Error in websocket connection for client {client_id}: {e}"
+        )
         manager.disconnect(client_id)
 
 
@@ -202,10 +218,14 @@ async def process_audio_data(audio_data: bytes, client_id: str):
 
                     # 音声セグメントの長さをチェック（最小1秒 = 16000サンプル = 32000バイト）
                     min_audio_length = SAMPLE_RATE * 1  # 1秒
-                    audio_samples = len(manager.speech_buffer[client_id]) // SAMPLE_WIDTH
-                    
+                    audio_samples = (
+                        len(manager.speech_buffer[client_id]) // SAMPLE_WIDTH
+                    )
+
                     if audio_samples < min_audio_length:
-                        logger.warning(f"[Audio] Segment {segment_id} too short ({audio_samples} samples < {min_audio_length}), skipping transcription")
+                        logger.warning(
+                            f"[Audio] Segment {segment_id} too short ({audio_samples} samples < {min_audio_length}), skipping transcription"
+                        )
                         await manager.send_json_message(
                             {
                                 "type": "transcription_skipped",
@@ -225,17 +245,25 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                             wf.setframerate(SAMPLE_RATE)
                             wf.writeframes(manager.speech_buffer[client_id])
                         wav_bytes = wav_buffer.getvalue()
-                        
-                        logger.info(f"[Audio] Processing segment {segment_id} ({audio_samples} samples, {audio_samples/SAMPLE_RATE:.2f}s)")
-                        
+
+                        logger.info(
+                            f"[Audio] Processing segment {segment_id} ({audio_samples} samples, {audio_samples / SAMPLE_RATE:.2f}s)"
+                        )
+
                         # 文字起こし処理のコールバック関数を定義
                         async def transcription_callback(text: str):
-                            logger.info(f"[Transcription] client={client_id} segment={segment_id} text={text}")
-                            await manager.send_transcription_result(text, client_id, segment_id)
-                        
+                            logger.info(
+                                f"[Transcription] client={client_id} segment={segment_id} text={text}"
+                            )
+                            await manager.send_transcription_result(
+                                text, client_id, segment_id
+                            )
+
                         # エラー処理のコールバック関数を定義
                         async def transcription_error_callback(error: Exception):
-                            logger.error(f"[Transcription Error] client={client_id} segment={segment_id} error={error}")
+                            logger.error(
+                                f"[Transcription Error] client={client_id} segment={segment_id} error={error}"
+                            )
                             await manager.send_json_message(
                                 {
                                     "type": "transcription_error",
@@ -245,14 +273,16 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                 },
                                 client_id,
                             )
-                        
+
                         # 非同期で文字起こしを実行
                         async def transcribe_task():
                             try:
-                                await transcribe_with_gpt4o(wav_bytes, callback=transcription_callback)
+                                await transcribe_with_gpt4o(
+                                    wav_bytes, callback=transcription_callback
+                                )
                             except Exception as e:
                                 await transcription_error_callback(e)
-                        
+
                         asyncio.create_task(transcribe_task())
 
                     manager.speech_buffer[client_id].clear()

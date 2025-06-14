@@ -11,21 +11,24 @@ OPENAI_API_KEY = settings.OPENAI_API_KEY
 client = OpenAI(api_key=OPENAI_API_KEY)
 logger = logging.getLogger(__name__)
 
+
 def _transcribe_sync(audio_bytes: bytes, model: str) -> str:
     with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
         tmp.write(audio_bytes)
         tmp.flush()
         with open(tmp.name, "rb") as audio_file:
             transcript = client.audio.transcriptions.create(
-                model=model,
-                file=audio_file
+                model=model, file=audio_file
             )
     return transcript.text
 
+
 async def transcribe_with_gpt4o(
     audio_bytes: bytes,
-    callback: Optional[Union[Callable[[str], None], Callable[[str], Awaitable[None]]]] = None,
-    model: str = "gpt-4o-transcribe"
+    callback: Optional[
+        Union[Callable[[str], None], Callable[[str], Awaitable[None]]]
+    ] = None,
+    model: str = "gpt-4o-transcribe",
 ) -> str:
     """
     OpenAI公式ライブラリで音声データを文字起こしする
@@ -36,7 +39,7 @@ async def transcribe_with_gpt4o(
     """
     text = await asyncio.to_thread(_transcribe_sync, audio_bytes, model)
     logger.info(f"Transcription: {text}")
-    
+
     if callback:
         # コールバックが非同期関数かどうかを確認
         if inspect.iscoroutinefunction(callback):
@@ -44,4 +47,4 @@ async def transcribe_with_gpt4o(
         else:
             callback(text)
 
-    return text 
+    return text
