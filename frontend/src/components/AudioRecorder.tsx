@@ -18,15 +18,15 @@ type TranscriptionResult = {
   id: string;
   text: string;
   confidence: number;
-  timestamp: string;
+  timestamp: number;
   is_final: boolean;
-  speaker?: string;
+  segment_id: number;
 };
 
 type VADResult = {
   is_speech: boolean;
   confidence: number;
-  timestamp: string;
+  timestamp: number;
 };
 
 interface AudioRecorderProps {
@@ -49,7 +49,11 @@ export function AudioRecorder({
     stopRecording,
     connect,
     disconnect,
-  } = useAudioRecorder({ websocketUrl });
+  } = useAudioRecorder({ 
+    websocketUrl,
+    onTranscriptionResult,
+    onVADResult,
+  });
 
   const [sessionTime, setSessionTime] = useState(0);
 
@@ -69,8 +73,6 @@ export function AudioRecorder({
       if (interval) clearInterval(interval);
     };
   }, [isRecording]);
-
-  // WebSocketメッセージの処理は将来的にuseAudioRecorderフック内で実装
 
   const handleStartRecording = async () => {
     if (!isConnected) {
@@ -206,13 +208,13 @@ export function AudioRecorder({
             <span className="text-slate-600 dark:text-slate-400">
               フォーマット:
             </span>
-            <span className="ml-2 font-medium">WebM/Opus</span>
+            <span className="ml-2 font-medium">PCM 16bit</span>
           </div>
           <div>
             <span className="text-slate-600 dark:text-slate-400">
               送信間隔:
             </span>
-            <span className="ml-2 font-medium">100ms</span>
+            <span className="ml-2 font-medium">32ms</span>
           </div>
         </div>
 
@@ -221,6 +223,7 @@ export function AudioRecorder({
           <p>• マイクへのアクセス許可が必要です</p>
           <p>• 音声データはリアルタイムでWebSocketサーバーに送信されます</p>
           <p>• ノイズ除去と自動ゲイン制御が有効です</p>
+          <p>• VADによる音声区間検出で効率的な文字起こしを実行</p>
         </div>
       </CardContent>
     </Card>
