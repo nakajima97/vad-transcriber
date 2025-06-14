@@ -38,15 +38,15 @@ type TranscriptionResult = {
   id: string;
   text: string;
   confidence: number;
-  timestamp: string;
+  timestamp: number;
   is_final: boolean;
-  speaker?: string;
+  segment_id: number;
 };
 
 type VADResult = {
   is_speech: boolean;
   confidence: number;
-  timestamp: string;
+  timestamp: number;
 };
 
 export default function VADTranscriberApp() {
@@ -201,16 +201,10 @@ export default function VADTranscriberApp() {
                             <div className="flex items-center space-x-4 mt-2 text-sm text-slate-600 dark:text-slate-400">
                               <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
-                                {new Date(result.timestamp).toLocaleTimeString(
-                                  'ja-JP',
-                                )}
+                                {new Date(
+                                  result.timestamp * 1000,
+                                ).toLocaleTimeString('ja-JP')}
                               </span>
-                              {result.speaker && (
-                                <span className="flex items-center gap-1">
-                                  <User className="w-3 h-3" />
-                                  {result.speaker}
-                                </span>
-                              )}
                               <span className="flex items-center gap-1">
                                 {result.is_final ? (
                                   <CheckCircle className="w-3 h-3 text-green-600" />
@@ -218,6 +212,9 @@ export default function VADTranscriberApp() {
                                   <AlertCircle className="w-3 h-3 text-yellow-600" />
                                 )}
                                 確信度: {Math.round(result.confidence * 100)}%
+                              </span>
+                              <span className="text-xs text-slate-500">
+                                セグメント: {result.segment_id}
                               </span>
                             </div>
                           </div>
@@ -305,9 +302,9 @@ export default function VADTranscriberApp() {
                                 確信度: {Math.round(vad.confidence * 100)}%
                               </span>
                               <span>
-                                {new Date(vad.timestamp).toLocaleTimeString(
-                                  'ja-JP',
-                                )}
+                                {new Date(
+                                  vad.timestamp * 1000,
+                                ).toLocaleTimeString('ja-JP')}
                               </span>
                             </div>
                           </div>

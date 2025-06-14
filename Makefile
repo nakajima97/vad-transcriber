@@ -8,7 +8,7 @@ front-up:
 # フロントフォーマット系
 
 front-format:
-	cd frontend && yarn format
+	cd frontend && yarn format --write
 
 front-lint:
 	cd frontend && yarn lint
@@ -26,6 +26,9 @@ server-format:
 
 server-lint:
 	cd server && docker compose exec api uv run ruff check
+
+server-lint-fix:
+	cd server && docker compose exec api uv run ruff check --fix
 
 server-test:
 	cd server && docker compose exec api uv run pytest
