@@ -8,7 +8,7 @@ front-up:
 # フロントフォーマット系
 
 front-format:
-	cd frontend && yarn format
+	cd frontend && yarn format --write
 
 front-lint:
 	cd frontend && yarn lint

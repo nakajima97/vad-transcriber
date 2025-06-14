@@ -58,11 +58,11 @@ interface AudioRecorderActions {
 export const useAudioRecorder = (
   options: AudioRecorderOptions = {},
 ): AudioRecorderState & AudioRecorderActions => {
-  const { 
+  const {
     websocketUrl = 'ws://localhost:8000/ws',
     onTranscriptionResult,
     onVADResult,
-    onMessage
+    onMessage,
   } = options;
 
   const [isRecording, setIsRecording] = useState(false);
@@ -113,76 +113,79 @@ export const useAudioRecorder = (
   `;
 
   // WebSocketメッセージハンドラー
-  const handleWebSocketMessage = useCallback((event: MessageEvent) => {
-    try {
-      const data = JSON.parse(event.data);
-      console.log('[WebSocket] Received message:', data);
-      
-      // 上位コンポーネントにメッセージを通知  
-      if (onMessage) {
-        onMessage(data);
-      }
+  const handleWebSocketMessage = useCallback(
+    (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('[WebSocket] Received message:', data);
 
-      switch (data.type) {
-        case 'connection_established':
-          console.log('[WebSocket] Connection established:', data.client_id);
-          break;
-          
-        case 'transcription_result':
-          console.log('[WebSocket] Transcription result:', data.text);
-          if (onTranscriptionResult) {
-            onTranscriptionResult({
-              id: data.id,
-              text: data.text,
-              confidence: data.confidence,
-              timestamp: data.timestamp,
-              is_final: data.is_final,
-              segment_id: data.segment_id,
-            });
-          }
-          break;
-          
-        case 'vad_result':
-          console.log('[WebSocket] VAD result:', data.is_speech);
-          if (onVADResult) {
-            onVADResult({
-              is_speech: data.is_speech,
-              confidence: data.confidence,
-              timestamp: data.timestamp,
-            });
-          }
-          break;
-          
-        case 'transcription_error':
-          console.error('[WebSocket] Transcription error:', data.error);
-          setError(`文字起こしエラー: ${data.error}`);
-          break;
-          
-        case 'transcription_skipped':
-          console.warn('[WebSocket] Transcription skipped:', data.reason);
-          break;
-          
-        case 'audio_received':
-          // 音声受信確認（デバッグ用、通常は非表示）
-          // console.log('[WebSocket] Audio received:', data.data_size);
-          break;
-          
-        case 'statistics':
-          console.log('[WebSocket] Statistics:', data.total_packets);
-          break;
-          
-        case 'error':
-          console.error('[WebSocket] Server error:', data.message);
-          setError(`サーバーエラー: ${data.message}`);
-          break;
-          
-        default:
-          console.warn('[WebSocket] Unknown message type:', data.type);
+        // 上位コンポーネントにメッセージを通知
+        if (onMessage) {
+          onMessage(data);
+        }
+
+        switch (data.type) {
+          case 'connection_established':
+            console.log('[WebSocket] Connection established:', data.client_id);
+            break;
+
+          case 'transcription_result':
+            console.log('[WebSocket] Transcription result:', data.text);
+            if (onTranscriptionResult) {
+              onTranscriptionResult({
+                id: data.id,
+                text: data.text,
+                confidence: data.confidence,
+                timestamp: data.timestamp,
+                is_final: data.is_final,
+                segment_id: data.segment_id,
+              });
+            }
+            break;
+
+          case 'vad_result':
+            console.log('[WebSocket] VAD result:', data.is_speech);
+            if (onVADResult) {
+              onVADResult({
+                is_speech: data.is_speech,
+                confidence: data.confidence,
+                timestamp: data.timestamp,
+              });
+            }
+            break;
+
+          case 'transcription_error':
+            console.error('[WebSocket] Transcription error:', data.error);
+            setError(`文字起こしエラー: ${data.error}`);
+            break;
+
+          case 'transcription_skipped':
+            console.warn('[WebSocket] Transcription skipped:', data.reason);
+            break;
+
+          case 'audio_received':
+            // 音声受信確認（デバッグ用、通常は非表示）
+            // console.log('[WebSocket] Audio received:', data.data_size);
+            break;
+
+          case 'statistics':
+            console.log('[WebSocket] Statistics:', data.total_packets);
+            break;
+
+          case 'error':
+            console.error('[WebSocket] Server error:', data.message);
+            setError(`サーバーエラー: ${data.message}`);
+            break;
+
+          default:
+            console.warn('[WebSocket] Unknown message type:', data.type);
+        }
+      } catch (err) {
+        console.error('[WebSocket] Failed to parse message:', err);
       }
-    } catch (err) {
-      console.error('[WebSocket] Failed to parse message:', err);
-    }
-  }, [onTranscriptionResult, onVADResult, onMessage]);
+    },
+    [onTranscriptionResult, onVADResult, onMessage],
+  );
 
   // WebSocket接続
   const connect = useCallback(() => {
@@ -191,20 +194,20 @@ export const useAudioRecorder = (
       console.log('[WebSocket] Connecting to:', websocketUrl);
       websocketRef.current = new WebSocket(websocketUrl);
       websocketRef.current.binaryType = 'arraybuffer';
-      
+
       websocketRef.current.onopen = () => {
         console.log('[WebSocket] Connected successfully');
         setIsConnected(true);
         setError(null);
       };
-      
+
       websocketRef.current.onmessage = handleWebSocketMessage;
-      
+
       websocketRef.current.onclose = (event) => {
         console.log('[WebSocket] Connection closed:', event.code, event.reason);
         setIsConnected(false);
       };
-      
+
       websocketRef.current.onerror = (event) => {
         console.error('[WebSocket] Connection error:', event);
         setError('WebSocket接続に失敗しました');
@@ -231,9 +234,9 @@ export const useAudioRecorder = (
     try {
       setError(null);
       if (!isConnected) connect();
-      
+
       console.log('[Audio] Starting recording...');
-      
+
       // マイクストリーム取得
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -245,11 +248,11 @@ export const useAudioRecorder = (
         },
       });
       streamRef.current = stream;
-      
+
       // AudioContext生成
       const audioContext = new AudioContext({ sampleRate: 16000 });
       audioContextRef.current = audioContext;
-      
+
       // AudioWorklet登録
       const blob = new Blob([workletProcessorCode], {
         type: 'application/javascript',
@@ -257,14 +260,14 @@ export const useAudioRecorder = (
       const url = URL.createObjectURL(blob);
       await audioContext.audioWorklet.addModule(url);
       URL.revokeObjectURL(url);
-      
+
       // Workletノード作成
       const workletNode = new AudioWorkletNode(
         audioContext,
         'pcm-worklet-processor',
       );
       workletNodeRef.current = workletNode;
-      
+
       // WorkletからPCMデータ受信→WebSocket送信
       workletNode.port.onmessage = (event) => {
         const data = event.data;
@@ -276,12 +279,12 @@ export const useAudioRecorder = (
           }
         }
       };
-      
+
       // マイク→Worklet接続
       const source = audioContext.createMediaStreamSource(stream);
       source.connect(workletNode);
       workletNode.connect(audioContext.destination); // 無音出力
-      
+
       setIsRecording(true);
       console.log('[Audio] Recording started');
     } catch (err) {
@@ -294,7 +297,7 @@ export const useAudioRecorder = (
   const stopRecording = useCallback(() => {
     console.log('[Audio] Stopping recording...');
     setIsRecording(false);
-    
+
     if (workletNodeRef.current) {
       workletNodeRef.current.disconnect();
       workletNodeRef.current = null;
@@ -309,7 +312,7 @@ export const useAudioRecorder = (
       }
       streamRef.current = null;
     }
-    
+
     setAudioLevel(0);
     console.log('[Audio] Recording stopped');
   }, []);

@@ -201,9 +201,9 @@ export default function VADTranscriberApp() {
                             <div className="flex items-center space-x-4 mt-2 text-sm text-slate-600 dark:text-slate-400">
                               <span className="flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
-                                {new Date(result.timestamp * 1000).toLocaleTimeString(
-                                  'ja-JP',
-                                )}
+                                {new Date(
+                                  result.timestamp * 1000,
+                                ).toLocaleTimeString('ja-JP')}
                               </span>
                               <span className="flex items-center gap-1">
                                 {result.is_final ? (
@@ -302,9 +302,9 @@ export default function VADTranscriberApp() {
                                 確信度: {Math.round(vad.confidence * 100)}%
                               </span>
                               <span>
-                                {new Date(vad.timestamp * 1000).toLocaleTimeString(
-                                  'ja-JP',
-                                )}
+                                {new Date(
+                                  vad.timestamp * 1000,
+                                ).toLocaleTimeString('ja-JP')}
                               </span>
                             </div>
                           </div>

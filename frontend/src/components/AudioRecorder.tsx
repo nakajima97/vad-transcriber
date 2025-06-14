@@ -49,7 +49,7 @@ export function AudioRecorder({
     stopRecording,
     connect,
     disconnect,
-  } = useAudioRecorder({ 
+  } = useAudioRecorder({
     websocketUrl,
     onTranscriptionResult,
     onVADResult,
