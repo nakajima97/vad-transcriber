@@ -34,8 +34,8 @@ async def transcribe_with_gpt4o(
     :return: 文字起こしテキスト
     """
     text = await asyncio.to_thread(_transcribe_sync, audio_bytes, model)
+    logger.info(f"Transcription: {text}")
     if callback:
         callback(text)
-    else:
-        logger.info(f"Transcription: {text}")
+
     return text 
