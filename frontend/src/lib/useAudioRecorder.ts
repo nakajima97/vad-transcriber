@@ -8,6 +8,7 @@ interface AudioRecorderState {
   isRecording: boolean;
   isConnected: boolean;
   error: string | null;
+  audioLevel: number;
 }
 
 interface AudioRecorderActions {
@@ -25,6 +26,7 @@ export const useAudioRecorder = (
   const [isRecording, setIsRecording] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [audioLevel, setAudioLevel] = useState(0);
 
   const websocketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -42,6 +44,13 @@ export const useAudioRecorder = (
         const input = inputs[0];
         if (input && input[0]) {
           this._buffer.push(...input[0]);
+          // 音量レベル（RMS）計算
+          let sum = 0;
+          for (let i = 0; i < input[0].length; i++) {
+            sum += input[0][i] * input[0][i];
+          }
+          const rms = Math.sqrt(sum / input[0].length);
+          this.port.postMessage({ type: 'level', rms });
           // 512サンプルごとに送信
           while (this._buffer.length >= 512) {
             const chunk = this._buffer.slice(0, 512);
@@ -52,7 +61,7 @@ export const useAudioRecorder = (
               let s = Math.max(-1, Math.min(1, chunk[i]));
               int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
             }
-            this.port.postMessage(int16.buffer, [int16.buffer]);
+            this.port.postMessage({ type: 'pcm', buffer: int16.buffer }, [int16.buffer]);
           }
         }
         return true;
@@ -126,8 +135,13 @@ export const useAudioRecorder = (
       workletNodeRef.current = workletNode;
       // WorkletからPCMデータ受信→WebSocket送信
       workletNode.port.onmessage = (event) => {
-        if (websocketRef.current?.readyState === WebSocket.OPEN) {
-          websocketRef.current.send(event.data);
+        const data = event.data;
+        if (data && data.type === 'level') {
+          setAudioLevel(data.rms);
+        } else if (data && data.type === 'pcm') {
+          if (websocketRef.current?.readyState === WebSocket.OPEN) {
+            websocketRef.current.send(data.buffer);
+          }
         }
       };
       // マイク→Worklet接続
@@ -171,6 +185,7 @@ export const useAudioRecorder = (
     isRecording,
     isConnected,
     error,
+    audioLevel,
     startRecording,
     stopRecording,
     connect,
