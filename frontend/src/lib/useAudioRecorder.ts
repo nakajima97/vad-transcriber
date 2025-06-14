@@ -1,10 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+// WebSocketメッセージの型定義
+interface WebSocketMessage {
+  type: string;
+  client_id?: string;
+  id?: string;
+  text?: string;
+  confidence?: number;
+  timestamp?: number;
+  is_final?: boolean;
+  segment_id?: number;
+  is_speech?: boolean;
+  error?: string;
+  reason?: string;
+  data_size?: number;
+  total_packets?: number;
+  message?: string;
+  [key: string]: unknown; // その他のプロパティに対応
+}
+
 interface AudioRecorderOptions {
   websocketUrl?: string;
   onTranscriptionResult?: (result: TranscriptionResult) => void;
   onVADResult?: (result: VADResult) => void;
-  onMessage?: (message: any) => void;
+  onMessage?: (message: WebSocketMessage) => void;
 }
 
 interface TranscriptionResult {
