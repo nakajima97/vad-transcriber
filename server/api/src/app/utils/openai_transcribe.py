@@ -18,7 +18,7 @@ def _transcribe_sync(audio_bytes: bytes, model: str) -> str:
         tmp.flush()
         with open(tmp.name, "rb") as audio_file:
             transcript = client.audio.transcriptions.create(
-                model=model, file=audio_file
+                model=model, file=audio_file, language="ja"
             )
     return transcript.text
 
