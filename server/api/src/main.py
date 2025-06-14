@@ -27,6 +27,7 @@ logging.basicConfig(
     level=logging.DEBUG,
 )
 
+
 @app.get("/")
 def read_root():
     return {

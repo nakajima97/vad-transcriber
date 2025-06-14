@@ -19,12 +19,14 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 SAMPLE_WIDTH = 2  # 16bit
 
+
 def save_pcm_as_wav(pcm_bytes: bytes, filepath: str):
-    with wave.open(filepath, 'wb') as wf:
+    with wave.open(filepath, "wb") as wf:
         wf.setnchannels(CHANNELS)
         wf.setsampwidth(SAMPLE_WIDTH)
         wf.setframerate(SAMPLE_RATE)
         wf.writeframes(pcm_bytes)
+
 
 class ConnectionManager:
     """WebSocket接続を管理するクラス"""
@@ -56,13 +58,21 @@ class ConnectionManager:
         if client_id in self.audio_data_count:
             del self.audio_data_count[client_id]
         # 切断時にバッファが残っていれば保存
-        if self.in_speech.get(client_id, False) and len(self.speech_buffer.get(client_id, b"")) > 0:
+        if (
+            self.in_speech.get(client_id, False)
+            and len(self.speech_buffer.get(client_id, b"")) > 0
+        ):
             self.segment_count[client_id] += 1
             filename = f"segment_{self.segment_count[client_id]:04d}.wav"
             filepath = os.path.join(AUDIO_SEGMENTS_DIR, filename)
             save_pcm_as_wav(self.speech_buffer[client_id], filepath)
             logger.info(f"[VAD] (disconnect) Saved segment: {filename}")
-        for d in [self.speech_buffer, self.in_speech, self.segment_count, self.pcm_buffer]:
+        for d in [
+            self.speech_buffer,
+            self.in_speech,
+            self.segment_count,
+            self.pcm_buffer,
+        ]:
             if client_id in d:
                 del d[client_id]
         logger.info(f"Client {client_id} disconnected")
@@ -128,14 +138,19 @@ async def process_audio_data(audio_data: bytes, client_id: str):
         frame_bytes = VAD_FRAME_SIZE * 2  # 16bit=2byte
         offset = 0
         while len(buf) - offset >= frame_bytes:
-            frame = buf[offset:offset+frame_bytes]
+            frame = buf[offset : offset + frame_bytes]
             is_speech, speech_prob = vad_predict(frame)
-            logger.info(f"[VAD] client={client_id} is_speech={is_speech} prob={speech_prob:.3f} size={frame_bytes}")
+            logger.info(
+                f"[VAD] client={client_id} is_speech={is_speech} prob={speech_prob:.3f} size={frame_bytes}"
+            )
             if is_speech:
                 manager.speech_buffer[client_id].extend(frame)
                 manager.in_speech[client_id] = True
             else:
-                if manager.in_speech.get(client_id, False) and len(manager.speech_buffer.get(client_id, b"")) > 0:
+                if (
+                    manager.in_speech.get(client_id, False)
+                    and len(manager.speech_buffer.get(client_id, b"")) > 0
+                ):
                     manager.segment_count[client_id] += 1
                     filename = f"segment_{manager.segment_count[client_id]:04d}.wav"
                     filepath = os.path.join(AUDIO_SEGMENTS_DIR, filename)

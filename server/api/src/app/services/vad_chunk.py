@@ -2,7 +2,9 @@ import torch
 import numpy as np
 
 # Silero VADモデルのロード（初回のみ）
-model, utils = torch.hub.load(repo_or_dir='snakers4/silero-vad', model='silero_vad', force_reload=False)
+model, utils = torch.hub.load(
+    repo_or_dir="snakers4/silero-vad", model="silero_vad", force_reload=False
+)
 (get_speech_timestamps, _, read_audio, _, _) = utils
 
 
@@ -15,7 +17,9 @@ def pcm_bytes_to_float32(pcm_bytes: bytes) -> np.ndarray:
     return audio
 
 
-def vad_predict(pcm_bytes: bytes, sample_rate: int = 16000, threshold: float = 0.5) -> tuple[bool, float]:
+def vad_predict(
+    pcm_bytes: bytes, sample_rate: int = 16000, threshold: float = 0.5
+) -> tuple[bool, float]:
     """
     PCMバイト列をVAD判定し、(is_speech, speech_prob)を返す
     """
@@ -25,4 +29,4 @@ def vad_predict(pcm_bytes: bytes, sample_rate: int = 16000, threshold: float = 0
     audio_tensor = torch.from_numpy(audio)
     speech_prob = model(audio_tensor, sample_rate).item()
     is_speech = speech_prob > threshold
-    return is_speech, speech_prob 
+    return is_speech, speech_prob
