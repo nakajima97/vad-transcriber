@@ -2,9 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface AudioRecorderOptions {
   websocketUrl?: string;
-  sampleRate?: number;
-  channels?: number;
-  bufferSize?: number;
 }
 
 interface AudioRecorderState {
@@ -24,12 +21,7 @@ interface AudioRecorderActions {
 export const useAudioRecorder = (
   options: AudioRecorderOptions = {},
 ): AudioRecorderState & AudioRecorderActions => {
-  const {
-    websocketUrl = 'ws://localhost:8000/ws',
-    sampleRate = 16000,
-    channels = 1,
-    bufferSize = 4096,
-  } = options;
+  const { websocketUrl = 'ws://localhost:8000/ws' } = options;
 
   const [isRecording, setIsRecording] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -37,71 +29,65 @@ export const useAudioRecorder = (
   const [audioLevel, setAudioLevel] = useState(0);
 
   const websocketRef = useRef<WebSocket | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // AudioWorkletProcessorのコード（インライン）
+  const workletProcessorCode = `
+    class PCMWorkletProcessor extends AudioWorkletProcessor {
+      constructor() {
+        super();
+        this._buffer = [];
+      }
+      process(inputs, outputs, parameters) {
+        const input = inputs[0];
+        if (input && input[0]) {
+          this._buffer.push(...input[0]);
+          // 音量レベル（RMS）計算
+          let sum = 0;
+          for (let i = 0; i < input[0].length; i++) {
+            sum += input[0][i] * input[0][i];
+          }
+          const rms = Math.sqrt(sum / input[0].length);
+          this.port.postMessage({ type: 'level', rms });
+          // 512サンプルごとに送信
+          while (this._buffer.length >= 512) {
+            const chunk = this._buffer.slice(0, 512);
+            this._buffer = this._buffer.slice(512);
+            // Float32→Int16変換
+            const int16 = new Int16Array(512);
+            for (let i = 0; i < 512; i++) {
+              let s = Math.max(-1, Math.min(1, chunk[i]));
+              int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            this.port.postMessage({ type: 'pcm', buffer: int16.buffer }, [int16.buffer]);
+          }
+        }
+        return true;
+      }
+    }
+    registerProcessor('pcm-worklet-processor', PCMWorkletProcessor);
+  `;
 
   // WebSocket接続
   const connect = useCallback(() => {
-    if (websocketRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
-
+    if (websocketRef.current?.readyState === WebSocket.OPEN) return;
     try {
       websocketRef.current = new WebSocket(websocketUrl);
-
+      websocketRef.current.binaryType = 'arraybuffer';
       websocketRef.current.onopen = () => {
-        console.log('WebSocket connected');
         setIsConnected(true);
         setError(null);
       };
-
       websocketRef.current.onclose = () => {
-        console.log('WebSocket disconnected');
         setIsConnected(false);
       };
-
       websocketRef.current.onerror = (event) => {
-        console.error('WebSocket error:', event);
         setError('WebSocket connection failed');
         setIsConnected(false);
       };
-
-      websocketRef.current.onmessage = (event) => {
-        // サーバーからのメッセージを処理
-        try {
-          const data = JSON.parse(event.data);
-          console.log('Received message:', data);
-
-          // メッセージタイプに応じて処理
-          switch (data.type) {
-            case 'connection_established':
-              console.log('WebSocket connection established:', data.message);
-              break;
-            case 'audio_received':
-              console.log(
-                `Audio data received: ${data.data_size} bytes (packet #${data.packet_count})`,
-              );
-              break;
-            case 'statistics':
-              console.log(`Statistics: ${data.total_packets} total packets`);
-              break;
-            case 'error':
-              console.error('Server error:', data.message);
-              setError(data.message);
-              break;
-            default:
-              console.log('Unknown message type:', data.type);
-          }
-        } catch (err) {
-          console.error('Failed to parse message:', err);
-        }
-      };
     } catch (err) {
-      console.error('Failed to create WebSocket:', err);
       setError('Failed to create WebSocket connection');
     }
   }, [websocketUrl]);
@@ -115,126 +101,76 @@ export const useAudioRecorder = (
     setIsConnected(false);
   }, []);
 
-  // 音声データをWebSocketで送信
-  const sendAudioData = useCallback((audioData: ArrayBuffer) => {
-    if (websocketRef.current?.readyState === WebSocket.OPEN) {
-      websocketRef.current.send(audioData);
-    }
-  }, []);
-
-  // 音声レベルの分析
-  const analyzeAudioLevel = useCallback(() => {
-    if (!analyserRef.current) return;
-
-    const bufferLength = analyserRef.current.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
-    analyserRef.current.getByteFrequencyData(dataArray);
-
-    // 音声レベルを計算（RMS）
-    let sum = 0;
-    for (let i = 0; i < bufferLength; i++) {
-      sum += dataArray[i] * dataArray[i];
-    }
-    const rms = Math.sqrt(sum / bufferLength);
-    const level = (rms / 255) * 100;
-
-    setAudioLevel(level);
-  }, []);
-
   // 録音開始
   const startRecording = useCallback(async () => {
     try {
       setError(null);
-
-      // マイクアクセス許可を取得
+      if (!isConnected) connect();
+      // マイクストリーム取得
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          sampleRate,
-          channelCount: channels,
+          sampleRate: 16000,
+          channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
         },
       });
-
       streamRef.current = stream;
-
-      // AudioContextを設定
-      audioContextRef.current = new AudioContext({ sampleRate });
-      sourceRef.current =
-        audioContextRef.current.createMediaStreamSource(stream);
-      analyserRef.current = audioContextRef.current.createAnalyser();
-
-      analyserRef.current.fftSize = 2048;
-      sourceRef.current.connect(analyserRef.current);
-
-      // 音声レベル監視を開始
-      intervalRef.current = setInterval(analyzeAudioLevel, 100);
-
-      // MediaRecorderを設定
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus',
+      // AudioContext生成
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      audioContextRef.current = audioContext;
+      // AudioWorklet登録
+      const blob = new Blob([workletProcessorCode], {
+        type: 'application/javascript',
       });
-
-      mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          // Blobを ArrayBuffer に変換して送信
-          event.data.arrayBuffer().then((arrayBuffer) => {
-            sendAudioData(arrayBuffer);
-          });
+      const url = URL.createObjectURL(blob);
+      await audioContext.audioWorklet.addModule(url);
+      URL.revokeObjectURL(url);
+      // Workletノード作成
+      const workletNode = new AudioWorkletNode(
+        audioContext,
+        'pcm-worklet-processor',
+      );
+      workletNodeRef.current = workletNode;
+      // WorkletからPCMデータ受信→WebSocket送信
+      workletNode.port.onmessage = (event) => {
+        const data = event.data;
+        if (data && data.type === 'level') {
+          setAudioLevel(data.rms);
+        } else if (data && data.type === 'pcm') {
+          if (websocketRef.current?.readyState === WebSocket.OPEN) {
+            websocketRef.current.send(data.buffer);
+          }
         }
       };
-
-      mediaRecorder.onerror = (event) => {
-        console.error('MediaRecorder error:', event);
-        setError('Recording failed');
-      };
-
-      // 定期的にデータを送信（100ms間隔）
-      mediaRecorder.start(100);
+      // マイク→Worklet接続
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(workletNode);
+      workletNode.connect(audioContext.destination); // 無音出力
       setIsRecording(true);
     } catch (err) {
-      console.error('Failed to start recording:', err);
-      setError(
-        err instanceof Error ? err.message : 'Failed to access microphone',
-      );
+      setError('Failed to start recording');
     }
-  }, [sampleRate, channels, sendAudioData, analyzeAudioLevel]);
+  }, [isConnected, connect]);
 
   // 録音停止
   const stopRecording = useCallback(() => {
     setIsRecording(false);
-
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state !== 'inactive'
-    ) {
-      mediaRecorderRef.current.stop();
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current = null;
     }
-
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
     if (streamRef.current) {
       for (const track of streamRef.current.getTracks()) {
         track.stop();
       }
       streamRef.current = null;
     }
-
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    sourceRef.current = null;
-    analyserRef.current = null;
-    mediaRecorderRef.current = null;
-    setAudioLevel(0);
   }, []);
 
   // クリーンアップ

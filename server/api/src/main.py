@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,6 +21,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+logging.basicConfig(
+    level=logging.DEBUG,
 )
 
 

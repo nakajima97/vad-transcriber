@@ -12,6 +12,8 @@ dependencies = [
     "sqlalchemy>=2.0.35",
     "uvicorn[standard]>=0.31.0",
     "python-multipart>=0.0.6",
+    "torch>=2.7.1",
+    "silero-vad>=5.1.2",
 ]
 
 [tool.uv]
