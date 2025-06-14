@@ -4,10 +4,13 @@ import time
 import os
 import wave
 from typing import Dict
+import io
+import asyncio
 
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
 from app.services.vad_chunk import vad_predict
+from app.utils.openai_transcribe import transcribe_with_gpt4o
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +159,18 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                     filepath = os.path.join(AUDIO_SEGMENTS_DIR, filename)
                     save_pcm_as_wav(manager.speech_buffer[client_id], filepath)
                     logger.info(f"[VAD] Saved segment: {filename}")
+
+                    # PCMデータをWAV形式bytesに変換
+                    wav_buffer = io.BytesIO()
+                    with wave.open(wav_buffer, "wb") as wf:
+                        wf.setnchannels(CHANNELS)
+                        wf.setsampwidth(SAMPLE_WIDTH)
+                        wf.setframerate(SAMPLE_RATE)
+                        wf.writeframes(manager.speech_buffer[client_id])
+                    wav_bytes = wav_buffer.getvalue()
+                    # 非同期でtranscribe_with_gpt4oを呼び出し
+                    asyncio.create_task(transcribe_with_gpt4o(wav_bytes))
+
                     manager.speech_buffer[client_id].clear()
                 manager.in_speech[client_id] = False
             offset += frame_bytes
