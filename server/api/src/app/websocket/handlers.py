@@ -8,7 +8,7 @@ import io
 import asyncio
 
 from fastapi import WebSocket, WebSocketDisconnect
-from app.services.vad_chunk import vad_predict
+from app.services.vad_chunk import vad_predict, VADProcessor
 from app.utils.openai_transcribe import transcribe_with_gpt4o
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ def save_pcm_as_wav(pcm_bytes: bytes, filepath: str):
 class ConnectionManager:
     """WebSocket接続を管理するクラス"""
 
-    def __init__(self):
+    def __init__(self, use_vad_processor: bool = False):
         self.active_connections: Dict[str, WebSocket] = {}
         self.audio_data_count: Dict[str, int] = {}
         # VAD用バッファ・状態
@@ -41,6 +41,10 @@ class ConnectionManager:
         self.in_speech: Dict[str, bool] = {}
         self.segment_count: Dict[str, int] = {}
         self.pcm_buffer: Dict[str, bytearray] = {}  # PCMバッファ（VADフレーム分割用）
+        
+        # 新しいVADProcessor機能（オプション）
+        self.use_vad_processor = use_vad_processor
+        self.vad_processors: Dict[str, VADProcessor] = {}  # クライアント毎のVADProcessor
 
     async def connect(self, websocket: WebSocket, client_id: str):
         """新しいクライアント接続を受け入れる"""
@@ -51,7 +55,17 @@ class ConnectionManager:
         self.in_speech[client_id] = False
         self.segment_count[client_id] = 0
         self.pcm_buffer[client_id] = bytearray()
-        logger.info(f"Client {client_id} connected")
+        
+        # VADProcessorを使用する場合は初期化
+        if self.use_vad_processor:
+            self.vad_processors[client_id] = VADProcessor(
+                pre_buffer_duration=0.5,  # 500ms pre-buffer
+                threshold=0.3,            # より敏感な閾値
+                chunk_size_ms=100         # 100ms単位で処理
+            )
+            logger.info(f"Client {client_id} connected with VADProcessor enabled")
+        else:
+            logger.info(f"Client {client_id} connected")
 
     def disconnect(self, client_id: str):
         """クライアント接続を切断する"""
@@ -88,6 +102,10 @@ class ConnectionManager:
         ]:
             if client_id in d:
                 del d[client_id]
+                
+        # VADProcessorも削除
+        if client_id in self.vad_processors:
+            del self.vad_processors[client_id]
 
         logger.info(f"[Disconnect] Client {client_id} disconnected and cleaned up")
 
@@ -215,8 +233,8 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                     save_pcm_as_wav(manager.speech_buffer[client_id], filepath)
                     logger.info(f"[VAD] Saved segment: {filename}")
 
-                    # 音声セグメントの長さをチェック（最小1秒 = 16000サンプル = 32000バイト）
-                    min_audio_length = SAMPLE_RATE * 1  # 1秒
+                    # 音声セグメントの長さをチェック（最小0.3秒 = 4800サンプル = 9600バイト）
+                    min_audio_length = SAMPLE_RATE * 0.3  # 0.3秒
                     audio_samples = (
                         len(manager.speech_buffer[client_id]) // SAMPLE_WIDTH
                     )
