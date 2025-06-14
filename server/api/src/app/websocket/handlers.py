@@ -8,7 +8,6 @@ import io
 import asyncio
 
 from fastapi import WebSocket, WebSocketDisconnect
-from fastapi.websockets import WebSocketState
 from app.services.vad_chunk import vad_predict
 from app.utils.openai_transcribe import transcribe_with_gpt4o
 
