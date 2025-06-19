@@ -24,6 +24,7 @@ SAMPLE_WIDTH = 2  # 16bit
 
 class PendingSegment:
     """保留中のセグメントデータ"""
+
     def __init__(self, segment_id: int, audio_data: bytes, timestamp: float):
         self.segment_id = segment_id
         self.audio_data = audio_data
@@ -36,51 +37,58 @@ class SegmentMerger:
     遅延バッファリング方式でセグメントを結合するクラス
     短いセグメントを一定時間待機して、次のセグメントと結合判定を行う
     """
-    
+
     def __init__(self, merge_timeout: float = 2.0, min_merge_duration: float = 0.8):
         self.merge_timeout = merge_timeout  # 結合待機時間（秒）
         self.min_merge_duration = min_merge_duration  # この時間未満は結合対象
-        self.pending_segments: Dict[str, PendingSegment] = {}  # クライアント毎の保留セグメント
+        self.pending_segments: Dict[
+            str, PendingSegment
+        ] = {}  # クライアント毎の保留セグメント
         self.pending_tasks: Dict[str, asyncio.Task] = {}  # 遅延処理タスク
-        
+
     async def process_segment(
-        self, 
-        segment_id: int, 
-        audio_data: bytes, 
+        self,
+        segment_id: int,
+        audio_data: bytes,
         client_id: str,
         transcription_callback,
-        error_callback
+        error_callback,
     ) -> bool:
         """
         セグメントを処理し、結合するかすぐに文字起こしするかを判定
-        
+
         Returns:
             bool: True=即座に処理, False=結合待機中
         """
         current_time = time.time()
         duration = len(audio_data) // SAMPLE_WIDTH / SAMPLE_RATE
-        
+
         # 前の保留セグメントがあるかチェック
         if client_id in self.pending_segments:
             prev_segment = self.pending_segments[client_id]
             time_gap = current_time - prev_segment.timestamp
-            
+
             # 前のセグメントが短く、時間間隔が短い場合は結合
-            if prev_segment.duration < self.min_merge_duration and time_gap < self.merge_timeout:
+            if (
+                prev_segment.duration < self.min_merge_duration
+                and time_gap < self.merge_timeout
+            ):
                 logger.info(
                     f"[SegmentMerger] Merging segment {prev_segment.segment_id} + {segment_id} "
                     f"(gap: {time_gap:.2f}s, prev_duration: {prev_segment.duration:.2f}s)"
                 )
-                
+
                 # 前のタスクをキャンセル
                 if client_id in self.pending_tasks:
                     self.pending_tasks[client_id].cancel()
                     del self.pending_tasks[client_id]
-                
+
                 # セグメントを結合
                 merged_audio = prev_segment.audio_data + audio_data
-                merged_segment = PendingSegment(prev_segment.segment_id, merged_audio, prev_segment.timestamp)
-                
+                merged_segment = PendingSegment(
+                    prev_segment.segment_id, merged_audio, prev_segment.timestamp
+                )
+
                 # 結合後のセグメントを処理
                 del self.pending_segments[client_id]
                 return await self._process_merged_segment(
@@ -88,17 +96,21 @@ class SegmentMerger:
                 )
             else:
                 # 前のセグメントを即座に処理（結合しない）
-                await self._flush_pending_segment(client_id, transcription_callback, error_callback)
-        
+                await self._flush_pending_segment(
+                    client_id, transcription_callback, error_callback
+                )
+
         # 現在のセグメントが短い場合は保留
         if duration < self.min_merge_duration:
             logger.info(
                 f"[SegmentMerger] Holding segment {segment_id} for potential merge "
                 f"(duration: {duration:.2f}s < {self.min_merge_duration}s)"
             )
-            
-            self.pending_segments[client_id] = PendingSegment(segment_id, audio_data, current_time)
-            
+
+            self.pending_segments[client_id] = PendingSegment(
+                segment_id, audio_data, current_time
+            )
+
             # 遅延処理タスクを開始
             self.pending_tasks[client_id] = asyncio.create_task(
                 self._delayed_process(client_id, transcription_callback, error_callback)
@@ -106,20 +118,22 @@ class SegmentMerger:
             return False
         else:
             # 長いセグメントは即座に処理
-            logger.info(f"[SegmentMerger] Processing segment {segment_id} immediately (duration: {duration:.2f}s)")
+            logger.info(
+                f"[SegmentMerger] Processing segment {segment_id} immediately (duration: {duration:.2f}s)"
+            )
             await transcription_callback(audio_data, segment_id)
             return True
-    
+
     async def _process_merged_segment(
-        self, 
-        merged_segment: PendingSegment, 
+        self,
+        merged_segment: PendingSegment,
         client_id: str,
         transcription_callback,
-        error_callback
+        error_callback,
     ) -> bool:
         """結合されたセグメントを処理"""
         duration = merged_segment.duration
-        
+
         # 結合後も短い場合は再度保留
         if duration < self.min_merge_duration:
             logger.info(
@@ -137,14 +151,18 @@ class SegmentMerger:
                 f"[SegmentMerger] Processing merged segment {merged_segment.segment_id} "
                 f"(final duration: {duration:.2f}s)"
             )
-            await transcription_callback(merged_segment.audio_data, merged_segment.segment_id)
+            await transcription_callback(
+                merged_segment.audio_data, merged_segment.segment_id
+            )
             return True
-    
-    async def _delayed_process(self, client_id: str, transcription_callback, error_callback):
+
+    async def _delayed_process(
+        self, client_id: str, transcription_callback, error_callback
+    ):
         """遅延後にセグメントを処理"""
         try:
             await asyncio.sleep(self.merge_timeout)
-            
+
             if client_id in self.pending_segments:
                 segment = self.pending_segments[client_id]
                 logger.info(
@@ -153,41 +171,51 @@ class SegmentMerger:
                 )
                 del self.pending_segments[client_id]
                 await transcription_callback(segment.audio_data, segment.segment_id)
-                
+
             if client_id in self.pending_tasks:
                 del self.pending_tasks[client_id]
-                
+
         except asyncio.CancelledError:
-            logger.info(f"[SegmentMerger] Delayed processing cancelled for client {client_id}")
+            logger.info(
+                f"[SegmentMerger] Delayed processing cancelled for client {client_id}"
+            )
         except Exception as e:
             logger.error(f"[SegmentMerger] Error in delayed processing: {e}")
             await error_callback(e)
-    
-    async def _flush_pending_segment(self, client_id: str, transcription_callback, error_callback):
+
+    async def _flush_pending_segment(
+        self, client_id: str, transcription_callback, error_callback
+    ):
         """保留中のセグメントを即座に処理"""
         if client_id in self.pending_segments:
             segment = self.pending_segments[client_id]
-            logger.info(f"[SegmentMerger] Flushing pending segment {segment.segment_id}")
-            
+            logger.info(
+                f"[SegmentMerger] Flushing pending segment {segment.segment_id}"
+            )
+
             # タスクをキャンセル
             if client_id in self.pending_tasks:
                 self.pending_tasks[client_id].cancel()
                 del self.pending_tasks[client_id]
-            
+
             del self.pending_segments[client_id]
             await transcription_callback(segment.audio_data, segment.segment_id)
-    
-    async def flush_client(self, client_id: str, transcription_callback, error_callback):
+
+    async def flush_client(
+        self, client_id: str, transcription_callback, error_callback
+    ):
         """クライアント切断時に保留中のセグメントを処理"""
         if client_id in self.pending_segments:
-            await self._flush_pending_segment(client_id, transcription_callback, error_callback)
-    
+            await self._flush_pending_segment(
+                client_id, transcription_callback, error_callback
+            )
+
     def cleanup_client(self, client_id: str):
         """クライアント用のリソースをクリーンアップ"""
         if client_id in self.pending_tasks:
             self.pending_tasks[client_id].cancel()
             del self.pending_tasks[client_id]
-        
+
         if client_id in self.pending_segments:
             del self.pending_segments[client_id]
 
@@ -203,7 +231,9 @@ def save_pcm_as_wav(pcm_bytes: bytes, filepath: str):
 class ConnectionManager:
     """WebSocket接続を管理するクラス"""
 
-    def __init__(self, use_vad_processor: bool = False, use_segment_merger: bool = True):
+    def __init__(
+        self, use_vad_processor: bool = False, use_segment_merger: bool = True
+    ):
         self.active_connections: Dict[str, WebSocket] = {}
         self.audio_data_count: Dict[str, int] = {}
         # VAD用バッファ・状態
@@ -211,17 +241,23 @@ class ConnectionManager:
         self.in_speech: Dict[str, bool] = {}
         self.segment_count: Dict[str, int] = {}
         self.pcm_buffer: Dict[str, bytearray] = {}  # PCMバッファ（VADフレーム分割用）
-        
+
         # 新しいVADProcessor機能（オプション）
         self.use_vad_processor = use_vad_processor
-        self.vad_processors: Dict[str, VADProcessor] = {}  # クライアント毎のVADProcessor
-        
+        self.vad_processors: Dict[
+            str, VADProcessor
+        ] = {}  # クライアント毎のVADProcessor
+
         # セグメント結合機能
         self.use_segment_merger = use_segment_merger
-        self.segment_merger = SegmentMerger(
-            merge_timeout=2.0,        # 2秒待機
-            min_merge_duration=0.8    # 0.8秒未満は結合対象
-        ) if use_segment_merger else None
+        self.segment_merger = (
+            SegmentMerger(
+                merge_timeout=2.0,  # 2秒待機
+                min_merge_duration=0.8,  # 0.8秒未満は結合対象
+            )
+            if use_segment_merger
+            else None
+        )
 
     async def connect(self, websocket: WebSocket, client_id: str):
         """新しいクライアント接続を受け入れる"""
@@ -232,13 +268,13 @@ class ConnectionManager:
         self.in_speech[client_id] = False
         self.segment_count[client_id] = 0
         self.pcm_buffer[client_id] = bytearray()
-        
+
         # VADProcessorを使用する場合は初期化
         if self.use_vad_processor:
             self.vad_processors[client_id] = VADProcessor(
                 pre_buffer_duration=0.5,  # 500ms pre-buffer
-                threshold=0.3,            # より敏感な閾値
-                chunk_size_ms=100         # 100ms単位で処理
+                threshold=0.3,  # より敏感な閾値
+                chunk_size_ms=100,  # 100ms単位で処理
             )
             logger.info(f"Client {client_id} connected with VADProcessor enabled")
         else:
@@ -279,17 +315,19 @@ class ConnectionManager:
         ]:
             if client_id in d:
                 del d[client_id]
-                
+
         # VADProcessorも削除
         if client_id in self.vad_processors:
             del self.vad_processors[client_id]
-            
+
         # SegmentMergerのクリーンアップ（同期的に実行）
         if self.segment_merger:
             try:
                 # 保留中のタスクをキャンセルしてクリーンアップ
                 self.segment_merger.cleanup_client(client_id)
-                logger.info(f"[Disconnect] SegmentMerger cleaned up for client {client_id}")
+                logger.info(
+                    f"[Disconnect] SegmentMerger cleaned up for client {client_id}"
+                )
             except Exception as e:
                 logger.error(f"[Disconnect] Error cleaning up SegmentMerger: {e}")
 
@@ -297,8 +335,10 @@ class ConnectionManager:
 
     async def async_disconnect(self, client_id: str):
         """非同期でクライアント接続を切断し、保留中のセグメントも処理する"""
-        logger.info(f"[AsyncDisconnect] Starting async disconnect process for client {client_id}")
-        
+        logger.info(
+            f"[AsyncDisconnect] Starting async disconnect process for client {client_id}"
+        )
+
         # SegmentMergerの保留中セグメントを処理
         if self.segment_merger and client_id in self.segment_merger.pending_segments:
             try:
@@ -306,19 +346,29 @@ class ConnectionManager:
                 async def final_callback(audio_data, segment_id):
                     """切断時の最終コールバック（ログのみ）"""
                     duration = len(audio_data) // SAMPLE_WIDTH / SAMPLE_RATE
-                    logger.info(f"[AsyncDisconnect] Final processing of segment {segment_id} (duration: {duration:.2f}s)")
-                    
+                    logger.info(
+                        f"[AsyncDisconnect] Final processing of segment {segment_id} (duration: {duration:.2f}s)"
+                    )
+
                 async def final_error_callback(error):
-                    logger.error(f"[AsyncDisconnect] Error in final processing: {error}")
-                
-                await self.segment_merger.flush_client(client_id, final_callback, final_error_callback)
-                logger.info(f"[AsyncDisconnect] Flushed pending segments for client {client_id}")
+                    logger.error(
+                        f"[AsyncDisconnect] Error in final processing: {error}"
+                    )
+
+                await self.segment_merger.flush_client(
+                    client_id, final_callback, final_error_callback
+                )
+                logger.info(
+                    f"[AsyncDisconnect] Flushed pending segments for client {client_id}"
+                )
             except Exception as e:
                 logger.error(f"[AsyncDisconnect] Error flushing segments: {e}")
-        
+
         # 通常の切断処理を実行
         self.disconnect(client_id)
-        logger.info(f"[AsyncDisconnect] Async disconnect completed for client {client_id}")
+        logger.info(
+            f"[AsyncDisconnect] Async disconnect completed for client {client_id}"
+        )
 
     async def send_json_message(self, data: dict, client_id: str):
         """特定のクライアントにJSONメッセージを送信"""
@@ -470,9 +520,11 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                         if manager.use_segment_merger and manager.segment_merger:
                             # 音声データのコピー（PCMバイト列）
                             segment_audio_data = bytes(manager.speech_buffer[client_id])
-                            
+
                             # セグメント結合処理のコールバック関数を定義
-                            async def segment_transcription_callback(audio_data: bytes, seg_id: int):
+                            async def segment_transcription_callback(
+                                audio_data: bytes, seg_id: int
+                            ):
                                 """セグメント結合後の文字起こしコールバック"""
                                 # PCMデータをWAV形式bytesに変換
                                 wav_buffer = io.BytesIO()
@@ -482,7 +534,7 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                     wf.setframerate(SAMPLE_RATE)
                                     wf.writeframes(audio_data)
                                 wav_bytes = wav_buffer.getvalue()
-                                
+
                                 samples = len(audio_data) // SAMPLE_WIDTH
                                 duration = samples / SAMPLE_RATE
                                 logger.info(
@@ -498,7 +550,9 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                         text, client_id, seg_id
                                     )
 
-                                async def transcription_error_callback(error: Exception):
+                                async def transcription_error_callback(
+                                    error: Exception,
+                                ):
                                     logger.error(
                                         f"[Transcription Error] client={client_id} segment={seg_id} error={error}"
                                     )
@@ -522,10 +576,12 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                         await transcription_error_callback(e)
 
                                 asyncio.create_task(transcribe_task())
-                            
+
                             async def segment_error_callback(error: Exception):
                                 """セグメント結合エラーコールバック"""
-                                logger.error(f"[SegmentMerger Error] client={client_id} error={error}")
+                                logger.error(
+                                    f"[SegmentMerger Error] client={client_id} error={error}"
+                                )
                                 await manager.send_json_message(
                                     {
                                         "type": "segment_merge_error",
@@ -534,21 +590,27 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                     },
                                     client_id,
                                 )
-                            
+
                             # セグメント結合処理を実行
-                            processed_immediately = await manager.segment_merger.process_segment(
-                                segment_id, 
-                                segment_audio_data, 
-                                client_id,
-                                segment_transcription_callback,
-                                segment_error_callback
+                            processed_immediately = (
+                                await manager.segment_merger.process_segment(
+                                    segment_id,
+                                    segment_audio_data,
+                                    client_id,
+                                    segment_transcription_callback,
+                                    segment_error_callback,
+                                )
                             )
-                            
+
                             if processed_immediately:
-                                logger.info(f"[SegmentMerger] Segment {segment_id} processed immediately")
+                                logger.info(
+                                    f"[SegmentMerger] Segment {segment_id} processed immediately"
+                                )
                             else:
-                                logger.info(f"[SegmentMerger] Segment {segment_id} held for potential merge")
-                        
+                                logger.info(
+                                    f"[SegmentMerger] Segment {segment_id} held for potential merge"
+                                )
+
                         else:
                             # 従来の処理（セグメント結合なし）
                             # PCMデータをWAV形式bytesに変換
