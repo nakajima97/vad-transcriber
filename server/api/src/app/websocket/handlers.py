@@ -3,7 +3,7 @@ import logging
 import time
 import os
 import wave
-from typing import Dict, Optional, List
+from typing import Dict
 import io
 import asyncio
 
