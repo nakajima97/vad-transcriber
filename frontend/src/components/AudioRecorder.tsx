@@ -68,12 +68,12 @@ export function AudioRecorder({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* 接続ステータス */}
       <div className="flex items-center justify-between">
         <Badge
           variant={isConnected ? 'default' : 'secondary'}
-          className="flex items-center gap-1"
+          className="flex items-center gap-1 text-xs"
         >
           {isConnected ? (
             <Wifi className="w-3 h-3" />
@@ -86,15 +86,15 @@ export function AudioRecorder({
           <Button
             variant="ghost"
             size="sm"
-            className="text-slate-500 hover:text-slate-700"
+            className="text-slate-500 hover:text-slate-700 h-6 w-6 p-0"
             onMouseEnter={() => setShowHelp(true)}
             onMouseLeave={() => setShowHelp(false)}
             onClick={() => setShowHelp(!showHelp)}
           >
-            <Info className="w-4 h-4" />
+            <Info className="w-3 h-3" />
           </Button>
           {showHelp && (
-            <div className="absolute right-0 top-8 z-10 w-80 p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg text-xs text-slate-600 dark:text-slate-400 space-y-1">
+            <div className="absolute right-0 top-6 z-10 w-72 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg shadow-lg text-xs text-slate-600 dark:text-slate-400 space-y-1">
               <p>• マイクへのアクセス許可が必要です</p>
               <p>• 音声データはリアルタイムでWebSocketサーバーに送信されます</p>
               <p>• ノイズ除去と自動ゲイン制御が有効です</p>
@@ -106,9 +106,9 @@ export function AudioRecorder({
 
       {/* エラー表示 */}
       {error && (
-        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg">
-          <AlertCircle className="w-4 h-4" />
-          <span className="text-sm">{error}</span>
+        <div className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg">
+          <AlertCircle className="w-3 h-3" />
+          <span className="text-xs">{error}</span>
         </div>
       )}
 
@@ -118,7 +118,7 @@ export function AudioRecorder({
           size="lg"
           onClick={isRecording ? handleStopRecording : handleStartRecording}
           className={`
-            w-24 h-24 rounded-full transition-all duration-300 
+            w-16 h-16 rounded-full transition-all duration-300 
             ${
               isRecording
                 ? 'bg-red-500 hover:bg-red-600 animate-pulse shadow-lg shadow-red-200'
@@ -128,26 +128,26 @@ export function AudioRecorder({
           disabled={!isConnected && isRecording}
         >
           {isRecording ? (
-            <Square className="w-6 h-6 text-white" />
+            <Square className="w-5 h-5 text-white" />
           ) : (
-            <Mic className="w-6 h-6 text-white" />
+            <Mic className="w-5 h-5 text-white" />
           )}
         </Button>
       </div>
 
       <div className="text-center">
-        <div className="text-lg font-medium text-slate-900 dark:text-white">
+        <div className="text-base font-medium text-slate-900 dark:text-white">
           {isRecording ? '録音中...' : '待機中'}
         </div>
       </div>
 
       {/* 音声レベルメーター */}
-      <div className="space-y-2">
-        <div className="flex justify-between text-sm text-slate-600 dark:text-slate-400">
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs text-slate-600 dark:text-slate-400">
           <span>音声レベル</span>
           <span>{Math.round(audioLevel)}%</span>
         </div>
-        <Progress value={audioLevel} className="w-full h-2" />
+        <Progress value={audioLevel} className="w-full h-1.5" />
       </div>
     </div>
   );
