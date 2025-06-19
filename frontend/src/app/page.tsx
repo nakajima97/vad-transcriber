@@ -86,7 +86,7 @@ export default function VADTranscriberApp() {
           {/* 左側: 文字起こし結果 (幅60%) */}
           <div className="w-3/5 flex flex-col">
             <Card className="bg-white dark:bg-slate-800 border-0 shadow-lg h-full flex flex-col">
-              <CardHeader className="flex flex-row items-center justify-between flex-shrink-0">
+              <CardHeader className="flex flex-col space-y-4 flex-shrink-0">
                 <div>
                   <CardTitle>文字起こし結果</CardTitle>
                   <CardDescription>
