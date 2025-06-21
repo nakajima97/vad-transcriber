@@ -502,7 +502,8 @@ async def process_audio_data(audio_data: bytes, client_id: str):
             else:
                 # 無音検出時の処理
                 if manager.in_speech.get(client_id, False):
-                    # 発話中の無音
+                    # 発話中の無音 - バッファに追加（自然な発話の流れを保持）
+                    manager.speech_buffer[client_id].extend(frame)
                     manager.silence_frame_count[client_id] += 1
                     
                     # 閾値に達した場合のみセグメント終了
