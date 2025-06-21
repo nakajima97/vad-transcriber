@@ -37,8 +37,9 @@ async def transcribe_with_gpt4o(
     :param model: 使用するモデル名（デフォルト: gpt-4o-transcribe）
     :return: 文字起こしテキスト
     """
+    logger.info(f"[Transcription] Starting transcription with model: {model}")
     text = await asyncio.to_thread(_transcribe_sync, audio_bytes, model)
-    logger.info(f"Transcription: {text}")
+    logger.info(f"[Transcription] Completed with model {model}: {text}")
 
     if callback:
         # コールバックが非同期関数かどうかを確認

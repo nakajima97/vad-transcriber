@@ -11,6 +11,11 @@ from datetime import datetime
 from fastapi import WebSocket, WebSocketDisconnect
 from app.services.vad_chunk import vad_predict, VADProcessor
 from app.utils.openai_transcribe import transcribe_with_gpt4o
+from app.schemas.websocket import (
+    TranscriptionModel,
+    WebSocketMessageType,
+    ModelSelectionMessage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +267,11 @@ class ConnectionManager:
         ] = {}  # クライアントIDごとの保存ディレクトリパス
         self.connection_timestamps: Dict[str, str] = {}  # 接続時刻の記録
 
+        # モデル選択管理
+        self.client_models: Dict[
+            str, TranscriptionModel
+        ] = {}  # クライアント毎の選択モデル
+
         # 新しいVADProcessor機能（オプション）
         self.use_vad_processor = use_vad_processor
         self.vad_processors: Dict[
@@ -289,6 +299,9 @@ class ConnectionManager:
         self.segment_count[client_id] = 0
         self.pcm_buffer[client_id] = bytearray()
         self.silence_frame_count[client_id] = 0  # 連続無音フレーム数を初期化
+
+        # デフォルトモデルを設定
+        self.client_models[client_id] = TranscriptionModel.GPT_4O_TRANSCRIBE
 
         # 接続時刻を記録してクライアント専用ディレクトリを作成
         connection_time = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -350,6 +363,7 @@ class ConnectionManager:
             self.silence_frame_count,  # 連続無音フレーム数もクリーンアップ
             self.client_directories,  # クライアント専用ディレクトリ情報
             self.connection_timestamps,  # 接続時刻情報
+            self.client_models,  # クライアント毎のモデル設定
         ]:
             if client_id in d:
                 del d[client_id]
@@ -408,6 +422,25 @@ class ConnectionManager:
             f"[AsyncDisconnect] Async disconnect completed for client {client_id}"
         )
 
+    async def set_client_model(self, client_id: str, model: TranscriptionModel):
+        """クライアントの音声認識モデルを設定（接続時のみ）"""
+        previous_model = self.client_models.get(
+            client_id, TranscriptionModel.GPT_4O_TRANSCRIBE
+        )
+        self.client_models[client_id] = model
+
+        logger.info(
+            f"[Model] Client {client_id} model set: {previous_model} -> {model}"
+        )
+
+        # 接続時のモデル設定確認メッセージのみ送信（変更通知は不要）
+        if previous_model != model:
+            logger.info(f"[Model] Model set for client {client_id}: {model}")
+
+    def get_client_model(self, client_id: str) -> TranscriptionModel:
+        """クライアントの現在の音声認識モデルを取得"""
+        return self.client_models.get(client_id, TranscriptionModel.GPT_4O_TRANSCRIBE)
+
     async def send_json_message(self, data: dict, client_id: str):
         """特定のクライアントにJSONメッセージを送信"""
         if client_id in self.active_connections:
@@ -440,6 +473,7 @@ class ConnectionManager:
     ):
         """文字起こし結果をクライアントに送信"""
         logger.info(f"send_transcription_result: {text}")
+        current_model = self.get_client_model(client_id)
         await self.send_json_message(
             {
                 "type": "transcription_result",
@@ -449,6 +483,7 @@ class ConnectionManager:
                 "timestamp": time.time(),
                 "is_final": True,
                 "segment_id": segment_id,
+                "model_used": current_model.value,  # Enumの値を文字列として使用
             },
             client_id,
         )
@@ -468,22 +503,62 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
 
     try:
         # 接続成功メッセージを送信
+        current_model = manager.get_client_model(client_id)
         await manager.send_json_message(
             {
                 "type": "connection_established",
                 "client_id": client_id,
                 "message": "WebSocket connection established successfully",
+                "model": current_model.value,  # Enumの値を文字列として使用
                 "timestamp": time.time(),
             },
             client_id,
         )
 
         while True:
-            # バイナリデータ（音声）を受信
-            audio_data = await websocket.receive_bytes()
+            try:
+                # バイナリまたはテキストメッセージを受信
+                message = await websocket.receive()
 
-            # 音声データを処理
-            await process_audio_data(audio_data, client_id)
+                if message["type"] == "websocket.receive":
+                    if "bytes" in message:
+                        # バイナリデータ（音声）の場合
+                        audio_data = message["bytes"]
+                        await process_audio_data(audio_data, client_id)
+                    elif "text" in message:
+                        # テキストデータ（JSON）の場合
+                        text_data = message["text"]
+                        await process_json_message(text_data, client_id)
+                    else:
+                        logger.warning(
+                            f"[WebSocket] Unknown message format from client {client_id}"
+                        )
+                elif message["type"] == "websocket.disconnect":
+                    logger.info(
+                        f"[WebSocket] Disconnect message received from client {client_id}"
+                    )
+                    break
+
+            except Exception as msg_error:
+                error_message = str(msg_error)
+                logger.error(
+                    f"[WebSocket] Error processing message from client {client_id}: {error_message}"
+                )
+
+                # WebSocket接続が切断されている場合のエラーメッセージをチェック
+                if (
+                    'Cannot call "receive" once a disconnect message has been received'
+                    in error_message
+                    or "disconnect" in error_message.lower()
+                    or websocket.client_state == 3  # DISCONNECTED state
+                ):
+                    logger.info(
+                        f"[WebSocket] Client {client_id} disconnected, stopping message processing"
+                    )
+                    break
+
+                # その他のエラーは継続
+                continue
 
     except WebSocketDisconnect:
         logger.info(
@@ -495,6 +570,82 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
             f"[Connection] Error in websocket connection for client {client_id}: {e}"
         )
         await manager.async_disconnect(client_id)
+
+
+async def process_json_message(text_data: str, client_id: str):
+    """受信したJSONメッセージを処理"""
+    try:
+        data = json.loads(text_data)
+        message_type = data.get("type")
+
+        logger.info(
+            f"[WebSocket] Received JSON message from client {client_id}: {message_type}"
+        )
+
+        if message_type == WebSocketMessageType.MODEL_SELECTION:
+            # モデル初期設定メッセージの処理（接続時のみ）
+            try:
+                model_selection = ModelSelectionMessage(**data)
+                await manager.set_client_model(client_id, model_selection.model)
+                logger.info(
+                    f"[Model] Client {client_id} initial model setup: {model_selection.model}"
+                )
+
+                # 接続時のモデル設定完了を通知
+                await manager.send_json_message(
+                    {
+                        "type": WebSocketMessageType.CONNECTION_ESTABLISHED,
+                        "message": f"音声認識モデル「{model_selection.model.value}」で接続完了",
+                        "model": model_selection.model.value,  # Enumの値を文字列として使用
+                        "timestamp": time.time(),
+                        "client_id": client_id,
+                    },
+                    client_id,
+                )
+
+            except Exception as e:
+                logger.error(f"[Model] Error processing initial model setup: {e}")
+                await manager.send_json_message(
+                    {
+                        "type": "error",
+                        "message": f"モデル設定エラー: {str(e)}",
+                        "timestamp": time.time(),
+                    },
+                    client_id,
+                )
+        else:
+            logger.warning(f"[WebSocket] Unknown message type: {message_type}")
+            await manager.send_json_message(
+                {
+                    "type": "error",
+                    "message": f"不明なメッセージタイプ: {message_type}",
+                    "timestamp": time.time(),
+                },
+                client_id,
+            )
+
+    except json.JSONDecodeError as e:
+        logger.error(f"[WebSocket] JSON decode error from client {client_id}: {e}")
+        await manager.send_json_message(
+            {
+                "type": "error",
+                "message": f"JSON形式エラー: {str(e)}",
+                "timestamp": time.time(),
+            },
+            client_id,
+        )
+    except Exception as e:
+        logger.error(
+            f"[WebSocket] Error processing JSON message from client {client_id}: {e}"
+        )
+        await manager.send_json_message(
+            {
+                "type": "error",
+                "message": f"メッセージ処理エラー: {str(e)}",
+                "timestamp": time.time(),
+            },
+            client_id,
+        )
 
 
 async def process_audio_data(audio_data: bytes, client_id: str):
@@ -622,8 +773,11 @@ async def process_audio_data(audio_data: bytes, client_id: str):
 
                                         # 文字起こし処理
                                         async def transcription_callback(text: str):
+                                            selected_model = manager.get_client_model(
+                                                client_id
+                                            )
                                             logger.info(
-                                                f"[Transcription] client={client_id} segment={seg_id} text={text}"
+                                                f"[Transcription] client={client_id} segment={seg_id} model={selected_model.value} text={text}"
                                             )
                                             await manager.send_transcription_result(
                                                 text, client_id, seg_id
@@ -632,14 +786,18 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                         async def transcription_error_callback(
                                             error: Exception,
                                         ):
+                                            current_model = manager.get_client_model(
+                                                client_id
+                                            )
                                             logger.error(
-                                                f"[Transcription Error] client={client_id} segment={seg_id} error={error}"
+                                                f"[Transcription Error] client={client_id} segment={seg_id} model={current_model.value} error={error}"
                                             )
                                             await manager.send_json_message(
                                                 {
                                                     "type": "transcription_error",
                                                     "segment_id": seg_id,
                                                     "error": str(error),
+                                                    "model_used": current_model.value,  # Enumの値を文字列として使用
                                                     "timestamp": time.time(),
                                                 },
                                                 client_id,
@@ -648,9 +806,14 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                         # 非同期で文字起こしを実行
                                         async def transcribe_task():
                                             try:
+                                                # クライアントの選択モデルを使用
+                                                selected_model = (
+                                                    manager.get_client_model(client_id)
+                                                )
                                                 await transcribe_with_gpt4o(
                                                     wav_bytes,
                                                     callback=transcription_callback,
+                                                    model=selected_model.value,  # Enumの値を文字列として使用
                                                 )
                                             except Exception as e:
                                                 await transcription_error_callback(e)
@@ -708,8 +871,11 @@ async def process_audio_data(audio_data: bytes, client_id: str):
 
                                     # 文字起こし処理のコールバック関数を定義
                                     async def transcription_callback(text: str):
+                                        selected_model = manager.get_client_model(
+                                            client_id
+                                        )
                                         logger.info(
-                                            f"[Transcription] client={client_id} segment={segment_id} text={text}"
+                                            f"[Transcription] client={client_id} segment={segment_id} model={selected_model.value} text={text}"
                                         )
                                         await manager.send_transcription_result(
                                             text, client_id, segment_id
@@ -719,14 +885,18 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                     async def transcription_error_callback(
                                         error: Exception,
                                     ):
+                                        current_model = manager.get_client_model(
+                                            client_id
+                                        )
                                         logger.error(
-                                            f"[Transcription Error] client={client_id} segment={segment_id} error={error}"
+                                            f"[Transcription Error] client={client_id} segment={segment_id} model={current_model.value} error={error}"
                                         )
                                         await manager.send_json_message(
                                             {
                                                 "type": "transcription_error",
                                                 "segment_id": segment_id,
                                                 "error": str(error),
+                                                "model_used": current_model.value,  # Enumの値を文字列として使用
                                                 "timestamp": time.time(),
                                             },
                                             client_id,
@@ -735,9 +905,14 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                     # 非同期で文字起こしを実行
                                     async def transcribe_task():
                                         try:
+                                            # クライアントの選択モデルを使用
+                                            selected_model = manager.get_client_model(
+                                                client_id
+                                            )
                                             await transcribe_with_gpt4o(
                                                 wav_bytes,
                                                 callback=transcription_callback,
+                                                model=selected_model.value,  # Enumの値を文字列として使用
                                             )
                                         except Exception as e:
                                             await transcription_error_callback(e)

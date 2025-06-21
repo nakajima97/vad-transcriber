@@ -1,44 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-
-// WebSocketメッセージの型定義
-interface WebSocketMessage {
-  type: string;
-  client_id?: string;
-  id?: string;
-  text?: string;
-  confidence?: number;
-  timestamp?: number;
-  is_final?: boolean;
-  segment_id?: number;
-  is_speech?: boolean;
-  error?: string;
-  reason?: string;
-  data_size?: number;
-  total_packets?: number;
-  message?: string;
-  [key: string]: unknown; // その他のプロパティに対応
-}
+import type {
+  TranscriptionModel,
+  TranscriptionResult,
+  VADResult,
+  WebSocketMessage,
+  ModelSelectionMessage,
+  ConnectionEstablishedMessage,
+} from './types';
 
 interface AudioRecorderOptions {
   websocketUrl?: string;
   onTranscriptionResult?: (result: TranscriptionResult) => void;
   onVADResult?: (result: VADResult) => void;
   onMessage?: (message: WebSocketMessage) => void;
-}
-
-interface TranscriptionResult {
-  id: string;
-  text: string;
-  confidence: number;
-  timestamp: number;
-  is_final: boolean;
-  segment_id: number;
-}
-
-interface VADResult {
-  is_speech: boolean;
-  confidence: number;
-  timestamp: number;
+  onModelChanged?: (model: TranscriptionModel) => void;
 }
 
 interface AudioRecorderState {
@@ -46,6 +21,7 @@ interface AudioRecorderState {
   isConnected: boolean;
   error: string | null;
   audioLevel: number;
+  currentModel: TranscriptionModel;
 }
 
 interface AudioRecorderActions {
@@ -53,6 +29,7 @@ interface AudioRecorderActions {
   stopRecording: () => void;
   connect: () => void;
   disconnect: () => void;
+  selectModel: (model: TranscriptionModel) => void;
 }
 
 export const useAudioRecorder = (
@@ -63,12 +40,15 @@ export const useAudioRecorder = (
     onTranscriptionResult,
     onVADResult,
     onMessage,
+    onModelChanged,
   } = options;
 
   const [isRecording, setIsRecording] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioLevel, setAudioLevel] = useState(0);
+  const [currentModel, setCurrentModel] =
+    useState<TranscriptionModel>('gpt-4o-transcribe');
 
   const websocketRef = useRef<WebSocket | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -125,9 +105,18 @@ export const useAudioRecorder = (
         }
 
         switch (data.type) {
-          case 'connection_established':
+          case 'connection_established': {
             console.log('[WebSocket] Connection established:', data.client_id);
+            const establishedMessage = data as ConnectionEstablishedMessage;
+            if (establishedMessage.model) {
+              setCurrentModel(establishedMessage.model);
+              console.log(
+                '[Model] Current model set to:',
+                establishedMessage.model,
+              );
+            }
             break;
+          }
 
           case 'transcription_result':
             console.log('[WebSocket] Transcription result:', data.text);
@@ -172,6 +161,11 @@ export const useAudioRecorder = (
             console.log('[WebSocket] Statistics:', data.total_packets);
             break;
 
+          case 'model_changed':
+            // 接続中のモデル変更は無効になったため、このケースは基本的に発生しない
+            console.log('[WebSocket] Model changed (legacy):', data);
+            break;
+
           case 'error':
             console.error('[WebSocket] Server error:', data.message);
             setError(`サーバーエラー: ${data.message}`);
@@ -199,6 +193,20 @@ export const useAudioRecorder = (
         console.log('[WebSocket] Connected successfully');
         setIsConnected(true);
         setError(null);
+
+        // 接続時にモデル情報を送信
+        setTimeout(() => {
+          if (websocketRef.current?.readyState === WebSocket.OPEN) {
+            const message: ModelSelectionMessage = {
+              type: 'model_selection',
+              model: currentModel,
+              timestamp: Date.now(),
+            };
+
+            websocketRef.current.send(JSON.stringify(message));
+            console.log('[Model] Initial model selection sent:', message);
+          }
+        }, 100); // 少し遅延させて確実に送信
       };
 
       websocketRef.current.onmessage = handleWebSocketMessage;
@@ -217,7 +225,7 @@ export const useAudioRecorder = (
       console.error('[WebSocket] Failed to create connection:', err);
       setError('WebSocket接続の作成に失敗しました');
     }
-  }, [websocketUrl, handleWebSocketMessage]);
+  }, [websocketUrl, handleWebSocketMessage, currentModel]);
 
   // WebSocket切断
   const disconnect = useCallback(() => {
@@ -317,6 +325,24 @@ export const useAudioRecorder = (
     console.log('[Audio] Recording stopped');
   }, []);
 
+  // モデル選択（接続前のみ）
+  const selectModel = useCallback(
+    (model: TranscriptionModel) => {
+      console.log('[Model] Selecting model:', model);
+
+      if (isConnected) {
+        console.warn('[Model] Cannot change model while connected');
+        setError('接続中はモデルを変更できません。');
+        return;
+      }
+
+      // 接続前なので、状態のみ更新
+      setCurrentModel(model);
+      console.log('[Model] Model set for next connection:', model);
+    },
+    [isConnected],
+  );
+
   // クリーンアップ
   useEffect(() => {
     return () => {
@@ -330,9 +356,11 @@ export const useAudioRecorder = (
     isConnected,
     error,
     audioLevel,
+    currentModel,
     startRecording,
     stopRecording,
     connect,
     disconnect,
+    selectModel,
   };
 };
