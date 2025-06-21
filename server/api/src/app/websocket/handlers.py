@@ -257,7 +257,9 @@ class ConnectionManager:
         self.silence_frame_count: Dict[str, int] = {}  # 連続無音フレーム数
 
         # クライアント毎のディレクトリ管理
-        self.client_directories: Dict[str, str] = {}  # クライアントIDごとの保存ディレクトリパス
+        self.client_directories: Dict[
+            str, str
+        ] = {}  # クライアントIDごとの保存ディレクトリパス
         self.connection_timestamps: Dict[str, str] = {}  # 接続時刻の記録
 
         # 新しいVADProcessor機能（オプション）
@@ -294,7 +296,7 @@ class ConnectionManager:
         client_dir_name = f"{connection_time}_{client_id}"
         client_dir_path = os.path.join(AUDIO_SEGMENTS_DIR, client_dir_name)
         self.client_directories[client_id] = client_dir_path
-        
+
         # ディレクトリを作成
         os.makedirs(client_dir_path, exist_ok=True)
         logger.info(f"[Connection] Created audio directory: {client_dir_path}")
@@ -332,7 +334,7 @@ class ConnectionManager:
         ):
             self.segment_count[client_id] = self.segment_count.get(client_id, 0) + 1
             filename = f"segment_{self.segment_count[client_id]:04d}.wav"
-            
+
             # クライアント専用ディレクトリに保存
             client_dir = self.client_directories.get(client_id, AUDIO_SEGMENTS_DIR)
             filepath = os.path.join(client_dir, filename)
@@ -547,9 +549,11 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                             manager.segment_count[client_id] += 1
                             segment_id = manager.segment_count[client_id]
                             filename = f"segment_{segment_id:04d}.wav"
-                            
+
                             # クライアント専用ディレクトリに保存
-                            client_dir = manager.client_directories.get(client_id, AUDIO_SEGMENTS_DIR)
+                            client_dir = manager.client_directories.get(
+                                client_id, AUDIO_SEGMENTS_DIR
+                            )
                             filepath = os.path.join(client_dir, filename)
                             save_pcm_as_wav(manager.speech_buffer[client_id], filepath)
                             logger.info(f"[VAD] Saved segment: {filepath}")
@@ -592,11 +596,15 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                         """セグメント結合後の文字起こしコールバック"""
                                         # セグメント結合後もファイル保存を行う
                                         filename = f"segment_{seg_id:04d}.wav"
-                                        client_dir = manager.client_directories.get(client_id, AUDIO_SEGMENTS_DIR)
+                                        client_dir = manager.client_directories.get(
+                                            client_id, AUDIO_SEGMENTS_DIR
+                                        )
                                         filepath = os.path.join(client_dir, filename)
                                         save_pcm_as_wav(audio_data, filepath)
-                                        logger.info(f"[SegmentMerger] Saved merged segment: {filepath}")
-                                        
+                                        logger.info(
+                                            f"[SegmentMerger] Saved merged segment: {filepath}"
+                                        )
+
                                         # PCMデータをWAV形式bytesに変換
                                         wav_buffer = io.BytesIO()
                                         with wave.open(wav_buffer, "wb") as wf:
