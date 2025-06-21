@@ -21,6 +21,12 @@ SAMPLE_RATE = 16000
 CHANNELS = 1
 SAMPLE_WIDTH = 2  # 16bit
 
+# VAD設定（検証用）
+VAD_SILENCE_TOLERANCE_SECONDS = float(os.getenv("VAD_SILENCE_TOLERANCE", "1.5"))  # 無音許容時間
+VAD_SILENCE_FRAME_THRESHOLD = int(VAD_SILENCE_TOLERANCE_SECONDS * SAMPLE_RATE / VAD_FRAME_SIZE)  # フレーム数
+
+logger.info(f"[VAD Config] Silence tolerance: {VAD_SILENCE_TOLERANCE_SECONDS}s ({VAD_SILENCE_FRAME_THRESHOLD} frames)")
+
 
 class PendingSegment:
     """保留中のセグメントデータ"""
@@ -241,6 +247,7 @@ class ConnectionManager:
         self.in_speech: Dict[str, bool] = {}
         self.segment_count: Dict[str, int] = {}
         self.pcm_buffer: Dict[str, bytearray] = {}  # PCMバッファ（VADフレーム分割用）
+        self.silence_frame_count: Dict[str, int] = {}  # 連続無音フレーム数
 
         # 新しいVADProcessor機能（オプション）
         self.use_vad_processor = use_vad_processor
@@ -268,6 +275,7 @@ class ConnectionManager:
         self.in_speech[client_id] = False
         self.segment_count[client_id] = 0
         self.pcm_buffer[client_id] = bytearray()
+        self.silence_frame_count[client_id] = 0  # 連続無音フレーム数を初期化
 
         # VADProcessorを使用する場合は初期化
         if self.use_vad_processor:
@@ -312,6 +320,7 @@ class ConnectionManager:
             self.in_speech,
             self.segment_count,
             self.pcm_buffer,
+            self.silence_frame_count,  # 連続無音フレーム数もクリーンアップ
         ]:
             if client_id in d:
                 del d[client_id]
@@ -477,192 +486,211 @@ async def process_audio_data(audio_data: bytes, client_id: str):
         while len(buf) - offset >= frame_bytes:
             frame = buf[offset : offset + frame_bytes]
             is_speech, speech_prob = vad_predict(frame)
+            
+            silence_count = manager.silence_frame_count.get(client_id, 0)
             logger.info(
-                f"[VAD] client={client_id} is_speech={is_speech} prob={speech_prob:.3f} size={frame_bytes}"
+                f"[VAD] client={client_id} is_speech={is_speech} prob={speech_prob:.3f} "
+                f"silence_frames={silence_count}/{VAD_SILENCE_FRAME_THRESHOLD}"
             )
+            
             if is_speech:
+                # 発話検出時の処理
                 manager.speech_buffer[client_id].extend(frame)
                 manager.in_speech[client_id] = True
+                manager.silence_frame_count[client_id] = 0  # 無音カウンタリセット
+                
             else:
-                if (
-                    manager.in_speech.get(client_id, False)
-                    and len(manager.speech_buffer.get(client_id, b"")) > 0
-                ):
-                    manager.segment_count[client_id] += 1
-                    segment_id = manager.segment_count[client_id]
-                    filename = f"segment_{segment_id:04d}.wav"
-                    filepath = os.path.join(AUDIO_SEGMENTS_DIR, filename)
-                    save_pcm_as_wav(manager.speech_buffer[client_id], filepath)
-                    logger.info(f"[VAD] Saved segment: {filename}")
+                # 無音検出時の処理
+                if manager.in_speech.get(client_id, False):
+                    # 発話中の無音
+                    manager.silence_frame_count[client_id] += 1
+                    
+                    # 閾値に達した場合のみセグメント終了
+                    if manager.silence_frame_count[client_id] >= VAD_SILENCE_FRAME_THRESHOLD:
+                        logger.info(f"[VAD] Silence threshold reached, ending segment for client {client_id}")
+                        
+                        # 既存のセグメント終了処理をそのまま実行
+                        if len(manager.speech_buffer.get(client_id, b"")) > 0:
+                            manager.segment_count[client_id] += 1
+                            segment_id = manager.segment_count[client_id]
+                            filename = f"segment_{segment_id:04d}.wav"
+                            filepath = os.path.join(AUDIO_SEGMENTS_DIR, filename)
+                            save_pcm_as_wav(manager.speech_buffer[client_id], filepath)
+                            logger.info(f"[VAD] Saved segment: {filename}")
 
-                    # 音声セグメントの長さをチェック（最小0.3秒 = 4800サンプル = 9600バイト）
-                    min_audio_length = SAMPLE_RATE * 0.3  # 0.3秒
-                    audio_samples = (
-                        len(manager.speech_buffer[client_id]) // SAMPLE_WIDTH
-                    )
+                            # 音声セグメントの長さをチェック（最小0.3秒 = 4800サンプル = 9600バイト）
+                            min_audio_length = SAMPLE_RATE * 0.3  # 0.3秒
+                            audio_samples = (
+                                len(manager.speech_buffer[client_id]) // SAMPLE_WIDTH
+                            )
 
-                    if audio_samples < min_audio_length:
-                        logger.warning(
-                            f"[Audio] Segment {segment_id} too short ({audio_samples} samples < {min_audio_length}), skipping transcription"
-                        )
-                        await manager.send_json_message(
-                            {
-                                "type": "transcription_skipped",
-                                "segment_id": segment_id,
-                                "reason": "Audio segment too short",
-                                "duration_seconds": audio_samples / SAMPLE_RATE,
-                                "timestamp": time.time(),
-                            },
-                            client_id,
-                        )
-                    else:
-                        # セグメント結合機能を使用する場合
-                        if manager.use_segment_merger and manager.segment_merger:
-                            # 音声データのコピー（PCMバイト列）
-                            segment_audio_data = bytes(manager.speech_buffer[client_id])
-
-                            # セグメント結合処理のコールバック関数を定義
-                            async def segment_transcription_callback(
-                                audio_data: bytes, seg_id: int
-                            ):
-                                """セグメント結合後の文字起こしコールバック"""
-                                # PCMデータをWAV形式bytesに変換
-                                wav_buffer = io.BytesIO()
-                                with wave.open(wav_buffer, "wb") as wf:
-                                    wf.setnchannels(CHANNELS)
-                                    wf.setsampwidth(SAMPLE_WIDTH)
-                                    wf.setframerate(SAMPLE_RATE)
-                                    wf.writeframes(audio_data)
-                                wav_bytes = wav_buffer.getvalue()
-
-                                samples = len(audio_data) // SAMPLE_WIDTH
-                                duration = samples / SAMPLE_RATE
-                                logger.info(
-                                    f"[Audio] Processing segment {seg_id} ({samples} samples, {duration:.2f}s)"
-                                )
-
-                                # 文字起こし処理
-                                async def transcription_callback(text: str):
-                                    logger.info(
-                                        f"[Transcription] client={client_id} segment={seg_id} text={text}"
-                                    )
-                                    await manager.send_transcription_result(
-                                        text, client_id, seg_id
-                                    )
-
-                                async def transcription_error_callback(
-                                    error: Exception,
-                                ):
-                                    logger.error(
-                                        f"[Transcription Error] client={client_id} segment={seg_id} error={error}"
-                                    )
-                                    await manager.send_json_message(
-                                        {
-                                            "type": "transcription_error",
-                                            "segment_id": seg_id,
-                                            "error": str(error),
-                                            "timestamp": time.time(),
-                                        },
-                                        client_id,
-                                    )
-
-                                # 非同期で文字起こしを実行
-                                async def transcribe_task():
-                                    try:
-                                        await transcribe_with_gpt4o(
-                                            wav_bytes, callback=transcription_callback
-                                        )
-                                    except Exception as e:
-                                        await transcription_error_callback(e)
-
-                                asyncio.create_task(transcribe_task())
-
-                            async def segment_error_callback(error: Exception):
-                                """セグメント結合エラーコールバック"""
-                                logger.error(
-                                    f"[SegmentMerger Error] client={client_id} error={error}"
+                            if audio_samples < min_audio_length:
+                                logger.warning(
+                                    f"[Audio] Segment {segment_id} too short ({audio_samples} samples < {min_audio_length}), skipping transcription"
                                 )
                                 await manager.send_json_message(
                                     {
-                                        "type": "segment_merge_error",
-                                        "error": str(error),
+                                        "type": "transcription_skipped",
+                                        "segment_id": segment_id,
+                                        "reason": "Audio segment too short",
+                                        "duration_seconds": audio_samples / SAMPLE_RATE,
                                         "timestamp": time.time(),
                                     },
                                     client_id,
-                                )
-
-                            # セグメント結合処理を実行
-                            processed_immediately = (
-                                await manager.segment_merger.process_segment(
-                                    segment_id,
-                                    segment_audio_data,
-                                    client_id,
-                                    segment_transcription_callback,
-                                    segment_error_callback,
-                                )
-                            )
-
-                            if processed_immediately:
-                                logger.info(
-                                    f"[SegmentMerger] Segment {segment_id} processed immediately"
                                 )
                             else:
-                                logger.info(
-                                    f"[SegmentMerger] Segment {segment_id} held for potential merge"
-                                )
+                                # セグメント結合機能を使用する場合
+                                if manager.use_segment_merger and manager.segment_merger:
+                                    # 音声データのコピー（PCMバイト列）
+                                    segment_audio_data = bytes(manager.speech_buffer[client_id])
 
-                        else:
-                            # 従来の処理（セグメント結合なし）
-                            # PCMデータをWAV形式bytesに変換
-                            wav_buffer = io.BytesIO()
-                            with wave.open(wav_buffer, "wb") as wf:
-                                wf.setnchannels(CHANNELS)
-                                wf.setsampwidth(SAMPLE_WIDTH)
-                                wf.setframerate(SAMPLE_RATE)
-                                wf.writeframes(manager.speech_buffer[client_id])
-                            wav_bytes = wav_buffer.getvalue()
+                                    # セグメント結合処理のコールバック関数を定義
+                                    async def segment_transcription_callback(
+                                        audio_data: bytes, seg_id: int
+                                    ):
+                                        """セグメント結合後の文字起こしコールバック"""
+                                        # PCMデータをWAV形式bytesに変換
+                                        wav_buffer = io.BytesIO()
+                                        with wave.open(wav_buffer, "wb") as wf:
+                                            wf.setnchannels(CHANNELS)
+                                            wf.setsampwidth(SAMPLE_WIDTH)
+                                            wf.setframerate(SAMPLE_RATE)
+                                            wf.writeframes(audio_data)
+                                        wav_bytes = wav_buffer.getvalue()
 
-                            logger.info(
-                                f"[Audio] Processing segment {segment_id} ({audio_samples} samples, {audio_samples / SAMPLE_RATE:.2f}s)"
-                            )
+                                        samples = len(audio_data) // SAMPLE_WIDTH
+                                        duration = samples / SAMPLE_RATE
+                                        logger.info(
+                                            f"[Audio] Processing segment {seg_id} ({samples} samples, {duration:.2f}s)"
+                                        )
 
-                            # 文字起こし処理のコールバック関数を定義
-                            async def transcription_callback(text: str):
-                                logger.info(
-                                    f"[Transcription] client={client_id} segment={segment_id} text={text}"
-                                )
-                                await manager.send_transcription_result(
-                                    text, client_id, segment_id
-                                )
+                                        # 文字起こし処理
+                                        async def transcription_callback(text: str):
+                                            logger.info(
+                                                f"[Transcription] client={client_id} segment={seg_id} text={text}"
+                                            )
+                                            await manager.send_transcription_result(
+                                                text, client_id, seg_id
+                                            )
 
-                            # エラー処理のコールバック関数を定義
-                            async def transcription_error_callback(error: Exception):
-                                logger.error(
-                                    f"[Transcription Error] client={client_id} segment={segment_id} error={error}"
-                                )
-                                await manager.send_json_message(
-                                    {
-                                        "type": "transcription_error",
-                                        "segment_id": segment_id,
-                                        "error": str(error),
-                                        "timestamp": time.time(),
-                                    },
-                                    client_id,
-                                )
+                                        async def transcription_error_callback(
+                                            error: Exception,
+                                        ):
+                                            logger.error(
+                                                f"[Transcription Error] client={client_id} segment={seg_id} error={error}"
+                                            )
+                                            await manager.send_json_message(
+                                                {
+                                                    "type": "transcription_error",
+                                                    "segment_id": seg_id,
+                                                    "error": str(error),
+                                                    "timestamp": time.time(),
+                                                },
+                                                client_id,
+                                            )
 
-                            # 非同期で文字起こしを実行
-                            async def transcribe_task():
-                                try:
-                                    await transcribe_with_gpt4o(
-                                        wav_bytes, callback=transcription_callback
+                                        # 非同期で文字起こしを実行
+                                        async def transcribe_task():
+                                            try:
+                                                await transcribe_with_gpt4o(
+                                                    wav_bytes, callback=transcription_callback
+                                                )
+                                            except Exception as e:
+                                                await transcription_error_callback(e)
+
+                                        asyncio.create_task(transcribe_task())
+
+                                    async def segment_error_callback(error: Exception):
+                                        """セグメント結合エラーコールバック"""
+                                        logger.error(
+                                            f"[SegmentMerger Error] client={client_id} error={error}"
+                                        )
+                                        await manager.send_json_message(
+                                            {
+                                                "type": "segment_merge_error",
+                                                "error": str(error),
+                                                "timestamp": time.time(),
+                                            },
+                                            client_id,
+                                        )
+
+                                    # セグメント結合処理を実行
+                                    processed_immediately = (
+                                        await manager.segment_merger.process_segment(
+                                            segment_id,
+                                            segment_audio_data,
+                                            client_id,
+                                            segment_transcription_callback,
+                                            segment_error_callback,
+                                        )
                                     )
-                                except Exception as e:
-                                    await transcription_error_callback(e)
 
-                            asyncio.create_task(transcribe_task())
+                                    if processed_immediately:
+                                        logger.info(
+                                            f"[SegmentMerger] Segment {segment_id} processed immediately"
+                                        )
+                                    else:
+                                        logger.info(
+                                            f"[SegmentMerger] Segment {segment_id} held for potential merge"
+                                        )
 
-                    manager.speech_buffer[client_id].clear()
-                manager.in_speech[client_id] = False
+                                else:
+                                    # 従来の処理（セグメント結合なし）
+                                    # PCMデータをWAV形式bytesに変換
+                                    wav_buffer = io.BytesIO()
+                                    with wave.open(wav_buffer, "wb") as wf:
+                                        wf.setnchannels(CHANNELS)
+                                        wf.setsampwidth(SAMPLE_WIDTH)
+                                        wf.setframerate(SAMPLE_RATE)
+                                        wf.writeframes(manager.speech_buffer[client_id])
+                                    wav_bytes = wav_buffer.getvalue()
+
+                                    logger.info(
+                                        f"[Audio] Processing segment {segment_id} ({audio_samples} samples, {audio_samples / SAMPLE_RATE:.2f}s)"
+                                    )
+
+                                    # 文字起こし処理のコールバック関数を定義
+                                    async def transcription_callback(text: str):
+                                        logger.info(
+                                            f"[Transcription] client={client_id} segment={segment_id} text={text}"
+                                        )
+                                        await manager.send_transcription_result(
+                                            text, client_id, segment_id
+                                        )
+
+                                    # エラー処理のコールバック関数を定義
+                                    async def transcription_error_callback(error: Exception):
+                                        logger.error(
+                                            f"[Transcription Error] client={client_id} segment={segment_id} error={error}"
+                                        )
+                                        await manager.send_json_message(
+                                            {
+                                                "type": "transcription_error",
+                                                "segment_id": segment_id,
+                                                "error": str(error),
+                                                "timestamp": time.time(),
+                                            },
+                                            client_id,
+                                        )
+
+                                    # 非同期で文字起こしを実行
+                                    async def transcribe_task():
+                                        try:
+                                            await transcribe_with_gpt4o(
+                                                wav_bytes, callback=transcription_callback
+                                            )
+                                        except Exception as e:
+                                            await transcription_error_callback(e)
+
+                                    asyncio.create_task(transcribe_task())
+
+                            # 状態リセット
+                            manager.speech_buffer[client_id].clear()
+                            manager.silence_frame_count[client_id] = 0
+                        
+                        manager.in_speech[client_id] = False
+                    # else: まだ閾値に達していない → 区切らずに継続
+                # else: 発話開始前の無音 → 何もしない
             offset += frame_bytes
         # 余りはバッファに残す
         manager.pcm_buffer[client_id] = buf[offset:]
