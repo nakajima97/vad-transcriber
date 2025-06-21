@@ -19,7 +19,8 @@ import {
   Mic,
   Trash2,
 } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState } from 'react';
+import { useAutoScroll } from '@/lib/useAutoScroll';
 
 type TranscriptionResult = {
   id: string;
@@ -40,39 +41,9 @@ export default function VADTranscriberApp() {
   const [transcriptionResults, setTranscriptionResults] = useState<
     TranscriptionResult[]
   >([]);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const wasScrolledToBottomRef = useRef(true); // 初期状態では一番下にいるとみなす
 
-  // スクロール位置が一番下かどうかを判定する関数
-  const isScrolledToBottom = () => {
-    if (!scrollContainerRef.current) return false;
-    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-
-    console.log('スクロールする：', scrollTop + clientHeight >= scrollHeight - 10);
-    console.log('scrollTop:', scrollTop);
-    console.log('scrollHeight:', scrollHeight);
-    console.log('clientHeight:', clientHeight);
-    // 1px程度の誤差を許容
-    return scrollTop + clientHeight >= scrollHeight - 10;
-  };
-
-  // スクロールイベントハンドラー：ユーザーのスクロール状態を追跡
-  const handleScroll = () => {
-    wasScrolledToBottomRef.current = isScrolledToBottom();
-  };
-
-  // 新しい文字起こし結果が追加されたときの自動スクロール処理
-  useEffect(() => {
-    if (transcriptionResults.length > 0 && wasScrolledToBottomRef.current) {
-      // 少し遅延を入れてDOM更新完了後にスクロール
-      setTimeout(() => {
-        scrollContainerRef.current?.scrollTo({
-          top: scrollContainerRef.current.scrollHeight,
-          behavior: 'smooth'
-        });
-      }, 0);
-    }
-  }, [transcriptionResults]);
+  // 自動スクロール機能を使用
+  const { scrollContainerRef, handleScroll } = useAutoScroll(transcriptionResults);
 
   const handleTranscriptionResult = (result: TranscriptionResult) => {
     setTranscriptionResults((prev) => [...prev, result]);
