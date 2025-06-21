@@ -20,6 +20,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useState } from 'react';
+import { useAutoScroll } from '@/lib/useAutoScroll';
 
 type TranscriptionResult = {
   id: string;
@@ -40,6 +41,10 @@ export default function VADTranscriberApp() {
   const [transcriptionResults, setTranscriptionResults] = useState<
     TranscriptionResult[]
   >([]);
+
+  // 自動スクロール機能を使用
+  const { scrollContainerRef, handleScroll } =
+    useAutoScroll(transcriptionResults);
 
   const handleTranscriptionResult = (result: TranscriptionResult) => {
     setTranscriptionResults((prev) => [...prev, result]);
@@ -125,7 +130,11 @@ export default function VADTranscriberApp() {
                 </div>
               </CardHeader>
               <CardContent className="flex-1 min-h-0 flex flex-col">
-                <div className="flex-1 overflow-y-auto space-y-3">
+                <div
+                  ref={scrollContainerRef}
+                  className="flex-1 overflow-y-auto space-y-3"
+                  onScroll={handleScroll}
+                >
                   {transcriptionResults.length === 0 ? (
                     <div className="text-center py-8 text-slate-500 dark:text-slate-400 h-full flex flex-col items-center justify-center">
                       <Mic className="w-12 h-12 mx-auto mb-4 text-slate-300" />
