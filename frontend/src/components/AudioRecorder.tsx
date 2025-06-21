@@ -1,26 +1,22 @@
 'use client';
 
 import { useAudioRecorder } from '@/lib/useAudioRecorder';
-import { AlertCircle, Info, Mic, Square, Wifi, WifiOff } from 'lucide-react';
+import { AlertCircle, Info, Mic, Square, Wifi, WifiOff, Settings, Zap, DollarSign } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Badge } from './shadcn/ui/badge';
 import { Button } from './shadcn/ui/button';
 import { Progress } from './shadcn/ui/progress';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './shadcn/ui/select';
+import type { TranscriptionModel, ModelInfo } from '@/lib/types';
+import { AVAILABLE_MODELS } from '@/lib/types';
 
-type TranscriptionResult = {
-  id: string;
-  text: string;
-  confidence: number;
-  timestamp: number;
-  is_final: boolean;
-  segment_id: number;
-};
-
-type VADResult = {
-  is_speech: boolean;
-  confidence: number;
-  timestamp: number;
-};
+import type { TranscriptionResult, VADResult } from '@/lib/types';
 
 interface AudioRecorderProps {
   websocketUrl?: string;
@@ -38,17 +34,39 @@ export function AudioRecorder({
     isConnected,
     error,
     audioLevel,
+    currentModel,
     startRecording,
     stopRecording,
     connect,
     disconnect,
+    selectModel,
   } = useAudioRecorder({
     websocketUrl,
     onTranscriptionResult,
     onVADResult,
+    onModelChanged: (model) => {
+      console.log('[AudioRecorder] Model changed to:', model);
+    },
   });
 
   const [showHelp, setShowHelp] = useState(false);
+
+  // コストアイコンを取得する関数
+  const getCostIcon = (cost: ModelInfo['cost']) => {
+    switch (cost) {
+      case 'low':
+        return <DollarSign className="w-3 h-3 text-green-500" />;
+      case 'medium':
+        return <DollarSign className="w-3 h-3 text-yellow-500" />;
+      case 'high':
+        return <DollarSign className="w-3 h-3 text-red-500" />;
+      default:
+        return <DollarSign className="w-3 h-3 text-gray-500" />;
+    }
+  };
+
+  // 現在のモデル情報を取得
+  const currentModelInfo = AVAILABLE_MODELS.find(model => model.id === currentModel);
 
   const handleStartRecording = async () => {
     if (!isConnected) {
@@ -102,6 +120,87 @@ export function AudioRecorder({
             </div>
           )}
         </div>
+      </div>
+
+      {/* モデル選択 */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            音声認識モデル
+          </span>
+          <div className="flex items-center gap-2">
+            {(isConnected || isRecording) && (
+              <Badge variant="secondary" className="text-xs">
+                固定
+              </Badge>
+            )}
+            <Settings className="w-4 h-4 text-slate-500" />
+          </div>
+        </div>
+        
+        <Select
+          value={currentModel}
+          onValueChange={(value: TranscriptionModel) => selectModel(value)}
+          disabled={isConnected || isRecording}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue>
+              <div className="flex items-center gap-2">
+                {getCostIcon(currentModelInfo?.cost || 'medium')}
+                <span className="text-sm">{currentModelInfo?.name || currentModel}</span>
+              </div>
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {AVAILABLE_MODELS.map((model) => (
+              <SelectItem key={model.id} value={model.id}>
+                <div className="flex items-start gap-3 py-1">
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {getCostIcon(model.cost)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm">{model.name}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                      {model.description}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {model.features.slice(0, 2).map((feature, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center px-1.5 py-0.5 text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded"
+                        >
+                          {feature}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        
+        {/* 現在のモデル情報表示 */}
+        {currentModelInfo && (
+          <div className="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 p-2 rounded">
+            <div className="font-medium mb-1">{currentModelInfo.description}</div>
+            <div className="flex flex-wrap gap-1">
+              {currentModelInfo.features.map((feature, index) => (
+                <span
+                  key={index}
+                  className="inline-flex items-center px-1 py-0.5 text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded"
+                >
+                  {feature}
+                </span>
+              ))}
+            </div>
+            {(isConnected || isRecording) && (
+              <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                ℹ️ モデルは接続前に選択してください。接続中は変更できません。
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* エラー表示 */}
