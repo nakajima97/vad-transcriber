@@ -6,7 +6,6 @@ import type {
   WebSocketMessage,
   ModelSelectionMessage,
   ConnectionEstablishedMessage,
-  ModelChangedMessage,
 } from './types';
 
 interface AudioRecorderOptions {
@@ -109,11 +108,11 @@ export const useAudioRecorder = (
           case 'connection_established': {
             console.log('[WebSocket] Connection established:', data.client_id);
             const establishedMessage = data as ConnectionEstablishedMessage;
-            if (establishedMessage.current_model) {
-              setCurrentModel(establishedMessage.current_model);
+            if (establishedMessage.model) {
+              setCurrentModel(establishedMessage.model);
               console.log(
                 '[Model] Current model set to:',
-                establishedMessage.current_model,
+                establishedMessage.model,
               );
             }
             break;
