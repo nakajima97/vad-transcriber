@@ -19,7 +19,7 @@ import {
   Mic,
   Trash2,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 type TranscriptionResult = {
   id: string;
@@ -40,6 +40,39 @@ export default function VADTranscriberApp() {
   const [transcriptionResults, setTranscriptionResults] = useState<
     TranscriptionResult[]
   >([]);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const wasScrolledToBottomRef = useRef(true); // 初期状態では一番下にいるとみなす
+
+  // スクロール位置が一番下かどうかを判定する関数
+  const isScrolledToBottom = () => {
+    if (!scrollContainerRef.current) return false;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+
+    console.log('スクロールする：', scrollTop + clientHeight >= scrollHeight - 10);
+    console.log('scrollTop:', scrollTop);
+    console.log('scrollHeight:', scrollHeight);
+    console.log('clientHeight:', clientHeight);
+    // 1px程度の誤差を許容
+    return scrollTop + clientHeight >= scrollHeight - 10;
+  };
+
+  // スクロールイベントハンドラー：ユーザーのスクロール状態を追跡
+  const handleScroll = () => {
+    wasScrolledToBottomRef.current = isScrolledToBottom();
+  };
+
+  // 新しい文字起こし結果が追加されたときの自動スクロール処理
+  useEffect(() => {
+    if (transcriptionResults.length > 0 && wasScrolledToBottomRef.current) {
+      // 少し遅延を入れてDOM更新完了後にスクロール
+      setTimeout(() => {
+        scrollContainerRef.current?.scrollTo({
+          top: scrollContainerRef.current.scrollHeight,
+          behavior: 'smooth'
+        });
+      }, 0);
+    }
+  }, [transcriptionResults]);
 
   const handleTranscriptionResult = (result: TranscriptionResult) => {
     setTranscriptionResults((prev) => [...prev, result]);
@@ -125,7 +158,11 @@ export default function VADTranscriberApp() {
                 </div>
               </CardHeader>
               <CardContent className="flex-1 min-h-0 flex flex-col">
-                <div className="flex-1 overflow-y-auto space-y-3">
+                <div 
+                  ref={scrollContainerRef}
+                  className="flex-1 overflow-y-auto space-y-3"
+                  onScroll={handleScroll}
+                >
                   {transcriptionResults.length === 0 ? (
                     <div className="text-center py-8 text-slate-500 dark:text-slate-400 h-full flex flex-col items-center justify-center">
                       <Mic className="w-12 h-12 mx-auto mb-4 text-slate-300" />
