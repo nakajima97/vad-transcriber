@@ -22,10 +22,16 @@ CHANNELS = 1
 SAMPLE_WIDTH = 2  # 16bit
 
 # VAD設定（検証用）
-VAD_SILENCE_TOLERANCE_SECONDS = float(os.getenv("VAD_SILENCE_TOLERANCE", "1.5"))  # 無音許容時間
-VAD_SILENCE_FRAME_THRESHOLD = int(VAD_SILENCE_TOLERANCE_SECONDS * SAMPLE_RATE / VAD_FRAME_SIZE)  # フレーム数
+VAD_SILENCE_TOLERANCE_SECONDS = float(
+    os.getenv("VAD_SILENCE_TOLERANCE", "1.5")
+)  # 無音許容時間
+VAD_SILENCE_FRAME_THRESHOLD = int(
+    VAD_SILENCE_TOLERANCE_SECONDS * SAMPLE_RATE / VAD_FRAME_SIZE
+)  # フレーム数
 
-logger.info(f"[VAD Config] Silence tolerance: {VAD_SILENCE_TOLERANCE_SECONDS}s ({VAD_SILENCE_FRAME_THRESHOLD} frames)")
+logger.info(
+    f"[VAD Config] Silence tolerance: {VAD_SILENCE_TOLERANCE_SECONDS}s ({VAD_SILENCE_FRAME_THRESHOLD} frames)"
+)
 
 
 class PendingSegment:
@@ -486,30 +492,35 @@ async def process_audio_data(audio_data: bytes, client_id: str):
         while len(buf) - offset >= frame_bytes:
             frame = buf[offset : offset + frame_bytes]
             is_speech, speech_prob = vad_predict(frame)
-            
+
             silence_count = manager.silence_frame_count.get(client_id, 0)
             logger.info(
                 f"[VAD] client={client_id} is_speech={is_speech} prob={speech_prob:.3f} "
                 f"silence_frames={silence_count}/{VAD_SILENCE_FRAME_THRESHOLD}"
             )
-            
+
             if is_speech:
                 # 発話検出時の処理
                 manager.speech_buffer[client_id].extend(frame)
                 manager.in_speech[client_id] = True
                 manager.silence_frame_count[client_id] = 0  # 無音カウンタリセット
-                
+
             else:
                 # 無音検出時の処理
                 if manager.in_speech.get(client_id, False):
                     # 発話中の無音 - バッファに追加（自然な発話の流れを保持）
                     manager.speech_buffer[client_id].extend(frame)
                     manager.silence_frame_count[client_id] += 1
-                    
+
                     # 閾値に達した場合のみセグメント終了
-                    if manager.silence_frame_count[client_id] >= VAD_SILENCE_FRAME_THRESHOLD:
-                        logger.info(f"[VAD] Silence threshold reached, ending segment for client {client_id}")
-                        
+                    if (
+                        manager.silence_frame_count[client_id]
+                        >= VAD_SILENCE_FRAME_THRESHOLD
+                    ):
+                        logger.info(
+                            f"[VAD] Silence threshold reached, ending segment for client {client_id}"
+                        )
+
                         # 既存のセグメント終了処理をそのまま実行
                         if len(manager.speech_buffer.get(client_id, b"")) > 0:
                             manager.segment_count[client_id] += 1
@@ -541,9 +552,14 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                 )
                             else:
                                 # セグメント結合機能を使用する場合
-                                if manager.use_segment_merger and manager.segment_merger:
+                                if (
+                                    manager.use_segment_merger
+                                    and manager.segment_merger
+                                ):
                                     # 音声データのコピー（PCMバイト列）
-                                    segment_audio_data = bytes(manager.speech_buffer[client_id])
+                                    segment_audio_data = bytes(
+                                        manager.speech_buffer[client_id]
+                                    )
 
                                     # セグメント結合処理のコールバック関数を定義
                                     async def segment_transcription_callback(
@@ -594,7 +610,8 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                         async def transcribe_task():
                                             try:
                                                 await transcribe_with_gpt4o(
-                                                    wav_bytes, callback=transcription_callback
+                                                    wav_bytes,
+                                                    callback=transcription_callback,
                                                 )
                                             except Exception as e:
                                                 await transcription_error_callback(e)
@@ -660,7 +677,9 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                         )
 
                                     # エラー処理のコールバック関数を定義
-                                    async def transcription_error_callback(error: Exception):
+                                    async def transcription_error_callback(
+                                        error: Exception,
+                                    ):
                                         logger.error(
                                             f"[Transcription Error] client={client_id} segment={segment_id} error={error}"
                                         )
@@ -678,7 +697,8 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                     async def transcribe_task():
                                         try:
                                             await transcribe_with_gpt4o(
-                                                wav_bytes, callback=transcription_callback
+                                                wav_bytes,
+                                                callback=transcription_callback,
                                             )
                                         except Exception as e:
                                             await transcription_error_callback(e)
@@ -688,7 +708,7 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                             # 状態リセット
                             manager.speech_buffer[client_id].clear()
                             manager.silence_frame_count[client_id] = 0
-                        
+
                         manager.in_speech[client_id] = False
                     # else: まだ閾値に達していない → 区切らずに継続
                 # else: 発話開始前の無音 → 何もしない
