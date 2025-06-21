@@ -1,7 +1,17 @@
 'use client';
 
 import { useAudioRecorder } from '@/lib/useAudioRecorder';
-import { AlertCircle, Info, Mic, Square, Wifi, WifiOff, Settings, Zap, DollarSign } from 'lucide-react';
+import {
+  AlertCircle,
+  Info,
+  Mic,
+  Square,
+  Wifi,
+  WifiOff,
+  Settings,
+  Zap,
+  DollarSign,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Badge } from './shadcn/ui/badge';
 import { Button } from './shadcn/ui/button';
@@ -66,7 +76,9 @@ export function AudioRecorder({
   };
 
   // 現在のモデル情報を取得
-  const currentModelInfo = AVAILABLE_MODELS.find(model => model.id === currentModel);
+  const currentModelInfo = AVAILABLE_MODELS.find(
+    (model) => model.id === currentModel,
+  );
 
   const handleStartRecording = async () => {
     if (!isConnected) {
@@ -137,7 +149,7 @@ export function AudioRecorder({
             <Settings className="w-4 h-4 text-slate-500" />
           </div>
         </div>
-        
+
         <Select
           value={currentModel}
           onValueChange={(value: TranscriptionModel) => selectModel(value)}
@@ -147,7 +159,9 @@ export function AudioRecorder({
             <SelectValue>
               <div className="flex items-center gap-2">
                 {getCostIcon(currentModelInfo?.cost || 'medium')}
-                <span className="text-sm">{currentModelInfo?.name || currentModel}</span>
+                <span className="text-sm">
+                  {currentModelInfo?.name || currentModel}
+                </span>
               </div>
             </SelectValue>
           </SelectTrigger>
@@ -164,9 +178,9 @@ export function AudioRecorder({
                       {model.description}
                     </div>
                     <div className="flex flex-wrap gap-1 mt-1">
-                      {model.features.slice(0, 2).map((feature, index) => (
+                      {model.features.slice(0, 2).map((feature) => (
                         <span
-                          key={index}
+                          key={feature}
                           className="inline-flex items-center px-1.5 py-0.5 text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded"
                         >
                           {feature}
@@ -179,15 +193,17 @@ export function AudioRecorder({
             ))}
           </SelectContent>
         </Select>
-        
+
         {/* 現在のモデル情報表示 */}
         {currentModelInfo && (
           <div className="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-800 p-2 rounded">
-            <div className="font-medium mb-1">{currentModelInfo.description}</div>
+            <div className="font-medium mb-1">
+              {currentModelInfo.description}
+            </div>
             <div className="flex flex-wrap gap-1">
-              {currentModelInfo.features.map((feature, index) => (
+              {currentModelInfo.features.map((feature) => (
                 <span
-                  key={index}
+                  key={feature}
                   className="inline-flex items-center px-1 py-0.5 text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded"
                 >
                   {feature}

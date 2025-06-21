@@ -1,5 +1,8 @@
 // 音声認識モデルの定義
-export type TranscriptionModel = 'whisper-1' | 'gpt-4o-transcribe' | 'gpt-4o-mini-transcribe';
+export type TranscriptionModel =
+  | 'whisper-1'
+  | 'gpt-4o-transcribe'
+  | 'gpt-4o-mini-transcribe';
 
 // 利用可能なモデル情報
 export interface ModelInfo {
@@ -36,7 +39,7 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
 ];
 
 // WebSocketメッセージタイプ
-export type WebSocketMessageType = 
+export type WebSocketMessageType =
   | 'model_selection'
   | 'connection_established'
   | 'transcription_result'
@@ -91,8 +94,6 @@ export interface TranscriptionErrorMessage extends BaseWebSocketMessage {
   model_used: TranscriptionModel;
 }
 
-
-
 export interface ErrorMessage extends BaseWebSocketMessage {
   type: 'error';
   message: string;
@@ -101,7 +102,7 @@ export interface ErrorMessage extends BaseWebSocketMessage {
 // Union型でメッセージタイプを統合
 export type ClientMessage = ModelSelectionMessage;
 
-export type ServerMessage = 
+export type ServerMessage =
   | ConnectionEstablishedMessage
   | TranscriptionResultMessage
   | VADResultMessage
@@ -125,4 +126,4 @@ export interface VADResult {
   is_speech: boolean;
   confidence: number;
   timestamp: number;
-} 
+}
