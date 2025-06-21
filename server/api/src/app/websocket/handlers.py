@@ -6,6 +6,7 @@ import wave
 from typing import Dict
 import io
 import asyncio
+from datetime import datetime
 
 from fastapi import WebSocket, WebSocketDisconnect
 from app.services.vad_chunk import vad_predict, VADProcessor
@@ -255,6 +256,10 @@ class ConnectionManager:
         self.pcm_buffer: Dict[str, bytearray] = {}  # PCMバッファ（VADフレーム分割用）
         self.silence_frame_count: Dict[str, int] = {}  # 連続無音フレーム数
 
+        # クライアント毎のディレクトリ管理
+        self.client_directories: Dict[str, str] = {}  # クライアントIDごとの保存ディレクトリパス
+        self.connection_timestamps: Dict[str, str] = {}  # 接続時刻の記録
+
         # 新しいVADProcessor機能（オプション）
         self.use_vad_processor = use_vad_processor
         self.vad_processors: Dict[
@@ -282,6 +287,17 @@ class ConnectionManager:
         self.segment_count[client_id] = 0
         self.pcm_buffer[client_id] = bytearray()
         self.silence_frame_count[client_id] = 0  # 連続無音フレーム数を初期化
+
+        # 接続時刻を記録してクライアント専用ディレクトリを作成
+        connection_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.connection_timestamps[client_id] = connection_time
+        client_dir_name = f"{connection_time}_{client_id}"
+        client_dir_path = os.path.join(AUDIO_SEGMENTS_DIR, client_dir_name)
+        self.client_directories[client_id] = client_dir_path
+        
+        # ディレクトリを作成
+        os.makedirs(client_dir_path, exist_ok=True)
+        logger.info(f"[Connection] Created audio directory: {client_dir_path}")
 
         # VADProcessorを使用する場合は初期化
         if self.use_vad_processor:
@@ -316,9 +332,12 @@ class ConnectionManager:
         ):
             self.segment_count[client_id] = self.segment_count.get(client_id, 0) + 1
             filename = f"segment_{self.segment_count[client_id]:04d}.wav"
-            filepath = os.path.join(AUDIO_SEGMENTS_DIR, filename)
+            
+            # クライアント専用ディレクトリに保存
+            client_dir = self.client_directories.get(client_id, AUDIO_SEGMENTS_DIR)
+            filepath = os.path.join(client_dir, filename)
             save_pcm_as_wav(self.speech_buffer[client_id], filepath)
-            logger.info(f"[VAD] (disconnect) Saved segment: {filename}")
+            logger.info(f"[VAD] (disconnect) Saved segment: {filepath}")
 
         # 全てのバッファとステートを削除
         for d in [
@@ -327,6 +346,8 @@ class ConnectionManager:
             self.segment_count,
             self.pcm_buffer,
             self.silence_frame_count,  # 連続無音フレーム数もクリーンアップ
+            self.client_directories,  # クライアント専用ディレクトリ情報
+            self.connection_timestamps,  # 接続時刻情報
         ]:
             if client_id in d:
                 del d[client_id]
@@ -526,9 +547,12 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                             manager.segment_count[client_id] += 1
                             segment_id = manager.segment_count[client_id]
                             filename = f"segment_{segment_id:04d}.wav"
-                            filepath = os.path.join(AUDIO_SEGMENTS_DIR, filename)
+                            
+                            # クライアント専用ディレクトリに保存
+                            client_dir = manager.client_directories.get(client_id, AUDIO_SEGMENTS_DIR)
+                            filepath = os.path.join(client_dir, filename)
                             save_pcm_as_wav(manager.speech_buffer[client_id], filepath)
-                            logger.info(f"[VAD] Saved segment: {filename}")
+                            logger.info(f"[VAD] Saved segment: {filepath}")
 
                             # 音声セグメントの長さをチェック（最小0.3秒 = 4800サンプル = 9600バイト）
                             min_audio_length = SAMPLE_RATE * 0.3  # 0.3秒
@@ -566,6 +590,13 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                         audio_data: bytes, seg_id: int
                                     ):
                                         """セグメント結合後の文字起こしコールバック"""
+                                        # セグメント結合後もファイル保存を行う
+                                        filename = f"segment_{seg_id:04d}.wav"
+                                        client_dir = manager.client_directories.get(client_id, AUDIO_SEGMENTS_DIR)
+                                        filepath = os.path.join(client_dir, filename)
+                                        save_pcm_as_wav(audio_data, filepath)
+                                        logger.info(f"[SegmentMerger] Saved merged segment: {filepath}")
+                                        
                                         # PCMデータをWAV形式bytesに変換
                                         wav_buffer = io.BytesIO()
                                         with wave.open(wav_buffer, "wb") as wf:
