@@ -739,8 +739,9 @@ async def process_audio_data(audio_data: bytes, client_id: str):
 
                                         # 文字起こし処理
                                         async def transcription_callback(text: str):
+                                            selected_model = manager.get_client_model(client_id)
                                             logger.info(
-                                                f"[Transcription] client={client_id} segment={seg_id} text={text}"
+                                                f"[Transcription] client={client_id} segment={seg_id} model={selected_model.value} text={text}"
                                             )
                                             await manager.send_transcription_result(
                                                 text, client_id, seg_id
@@ -749,10 +750,10 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                         async def transcription_error_callback(
                                             error: Exception,
                                         ):
-                                            logger.error(
-                                                f"[Transcription Error] client={client_id} segment={seg_id} error={error}"
-                                            )
                                             current_model = manager.get_client_model(client_id)
+                                            logger.error(
+                                                f"[Transcription Error] client={client_id} segment={seg_id} model={current_model.value} error={error}"
+                                            )
                                             await manager.send_json_message(
                                                 {
                                                     "type": "transcription_error",
@@ -830,8 +831,9 @@ async def process_audio_data(audio_data: bytes, client_id: str):
 
                                     # 文字起こし処理のコールバック関数を定義
                                     async def transcription_callback(text: str):
+                                        selected_model = manager.get_client_model(client_id)
                                         logger.info(
-                                            f"[Transcription] client={client_id} segment={segment_id} text={text}"
+                                            f"[Transcription] client={client_id} segment={segment_id} model={selected_model.value} text={text}"
                                         )
                                         await manager.send_transcription_result(
                                             text, client_id, segment_id
@@ -841,10 +843,10 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                     async def transcription_error_callback(
                                         error: Exception,
                                     ):
-                                        logger.error(
-                                            f"[Transcription Error] client={client_id} segment={segment_id} error={error}"
-                                        )
                                         current_model = manager.get_client_model(client_id)
+                                        logger.error(
+                                            f"[Transcription Error] client={client_id} segment={segment_id} model={current_model.value} error={error}"
+                                        )
                                         await manager.send_json_message(
                                             {
                                                 "type": "transcription_error",
