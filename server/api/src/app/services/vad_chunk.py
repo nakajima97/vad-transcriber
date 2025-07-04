@@ -11,7 +11,7 @@ if os.environ.get("TESTING") == "true":
         def __call__(self, audio_tensor, sample_rate):
             # テスト用の固定値を返す
             return torch.tensor(0.8)  # 高い音声確率
-    
+
     model = MockVADModel()
     utils = (None, None, None, None, None)
     (get_speech_timestamps, _, read_audio, _, _) = utils
