@@ -41,9 +41,9 @@ def read_root():
 # WebSocketエンドポイント
 @app.websocket("/ws")
 async def websocket_route(
-    websocket: WebSocket, 
+    websocket: WebSocket,
     transcription_adapter=Depends(get_transcription_adapter),
-    vad_adapter=Depends(get_vad_adapter)
+    vad_adapter=Depends(get_vad_adapter),
 ):
     # アダプターを使用してConnectionManagerを初期化
     initialize_manager(transcription_adapter, vad_adapter)

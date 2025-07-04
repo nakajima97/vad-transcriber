@@ -3,7 +3,10 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.services.health_service import HealthService
-from app.adapters.transcription import OpenAITranscriptionAdapter, MockTranscriptionAdapter
+from app.adapters.transcription import (
+    OpenAITranscriptionAdapter,
+    MockTranscriptionAdapter,
+)
 from app.adapters.vad import create_vad_adapter
 from app.utils.env import settings
 import os

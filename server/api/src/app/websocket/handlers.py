@@ -251,11 +251,11 @@ class ConnectionManager:
     """WebSocket接続を管理するクラス"""
 
     def __init__(
-        self, 
+        self,
         transcription_adapter: TranscriptionAdapter,
         vad_adapter: VADAdapter,
-        use_vad_processor: bool = False, 
-        use_segment_merger: bool = True
+        use_vad_processor: bool = False,
+        use_segment_merger: bool = True,
     ):
         self.transcription_adapter = transcription_adapter
         self.vad_adapter = vad_adapter
@@ -501,7 +501,9 @@ class ConnectionManager:
 manager = None
 
 
-def initialize_manager(transcription_adapter: TranscriptionAdapter, vad_adapter: VADAdapter):
+def initialize_manager(
+    transcription_adapter: TranscriptionAdapter, vad_adapter: VADAdapter
+):
     """ConnectionManagerを初期化"""
     global manager
     if manager is None:
@@ -509,7 +511,7 @@ def initialize_manager(transcription_adapter: TranscriptionAdapter, vad_adapter:
             transcription_adapter=transcription_adapter,
             vad_adapter=vad_adapter,
             use_vad_processor=False,
-            use_segment_merger=True
+            use_segment_merger=True,
         )
 
 

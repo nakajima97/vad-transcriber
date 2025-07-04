@@ -6,7 +6,7 @@ from .vad import SileroVADAdapter, MockVADAdapter, create_vad_adapter
 
 __all__ = [
     "BaseAdapter",
-    "TranscriptionAdapter", 
+    "TranscriptionAdapter",
     "VADAdapter",
     "OpenAITranscriptionAdapter",
     "MockTranscriptionAdapter",

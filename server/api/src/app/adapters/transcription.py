@@ -61,12 +61,18 @@ class OpenAITranscriptionAdapter(TranscriptionAdapter):
         音声データを文字起こし
         """
         if model not in self.supported_models:
-            raise ValueError(f"Unsupported model: {model}. Supported models: {self.supported_models}")
+            raise ValueError(
+                f"Unsupported model: {model}. Supported models: {self.supported_models}"
+            )
 
-        logger.info(f"[OpenAI Transcription] Starting transcription with model: {model}")
-        
-        text = await asyncio.to_thread(self._transcribe_sync, audio_bytes, model, language)
-        
+        logger.info(
+            f"[OpenAI Transcription] Starting transcription with model: {model}"
+        )
+
+        text = await asyncio.to_thread(
+            self._transcribe_sync, audio_bytes, model, language
+        )
+
         logger.info(f"[OpenAI Transcription] Completed with model {model}: {text}")
 
         if callback:
@@ -112,7 +118,7 @@ class MockTranscriptionAdapter(TranscriptionAdapter):
         固定の文字起こし結果を返す
         """
         text = "これはテスト用の文字起こし結果です"
-        
+
         if callback:
             if inspect.iscoroutinefunction(callback):
                 await callback(text)

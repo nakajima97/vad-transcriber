@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import os
 import logging
+
 # from typing import Optional
 from .base import VADAdapter
 
@@ -27,9 +28,9 @@ class SileroVADAdapter(VADAdapter):
         try:
             # cSpell:ignore snakers silero
             self._model, self._utils = torch.hub.load(
-                repo_or_dir="snakers4/silero-vad", 
-                model="silero_vad", 
-                force_reload=False
+                repo_or_dir="snakers4/silero-vad",
+                model="silero_vad",
+                force_reload=False,
             )
             logger.info("Silero VAD model loaded successfully")
         except Exception as e:
@@ -50,7 +51,9 @@ class SileroVADAdapter(VADAdapter):
             logger.error(f"VAD health check failed: {e}")
             return False
 
-    def _pcm_bytes_to_float32(self, pcm_bytes: bytes) -> np.ndarray:  # cSpell:ignore ndarray
+    def _pcm_bytes_to_float32(
+        self, pcm_bytes: bytes
+    ) -> np.ndarray:  # cSpell:ignore ndarray
         """
         16bit PCMバイト列をfloat32正規化配列に変換
         """
@@ -70,11 +73,11 @@ class SileroVADAdapter(VADAdapter):
         audio = self._pcm_bytes_to_float32(audio_bytes)
         if len(audio) == 0:
             return False, 0.0
-        
+
         audio_tensor = torch.from_numpy(audio)
         speech_prob = self._model(audio_tensor, sample_rate).item()
         is_speech = speech_prob > threshold
-        
+
         return is_speech, speech_prob
 
     def get_optimal_chunk_size(self) -> int:
@@ -111,7 +114,7 @@ class MockVADAdapter(VADAdapter):
         """
         if len(audio_bytes) == 0:
             return False, 0.0
-        
+
         is_speech = self.fixed_probability > threshold
         return is_speech, self.fixed_probability
 
