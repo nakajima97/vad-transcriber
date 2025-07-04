@@ -1,50 +1,6 @@
-import torch
-import numpy as np
 from collections import deque
 from typing import Optional
-import os
-
-# テスト環境でのモック対応
-if os.environ.get("TESTING") == "true":
-    # テスト用のモックモデル
-    class MockVADModel:
-        def __call__(self, audio_tensor, sample_rate):
-            # テスト用の固定値を返す
-            return torch.tensor(0.8)  # 高い音声確率
-
-    model = MockVADModel()
-    utils = (None, None, None, None, None)
-    (get_speech_timestamps, _, read_audio, _, _) = utils
-else:
-    # 本番環境でのSilero VADモデルのロード
-    model, utils = torch.hub.load(
-        repo_or_dir="snakers4/silero-vad", model="silero_vad", force_reload=False
-    )
-    (get_speech_timestamps, _, read_audio, _, _) = utils
-
-
-def pcm_bytes_to_float32(pcm_bytes: bytes) -> np.ndarray:
-    """
-    16bit PCMバイト列をfloat32正規化配列に変換
-    """
-    audio = np.frombuffer(pcm_bytes, dtype=np.int16)
-    audio = audio.astype(np.float32) / 32768.0
-    return audio
-
-
-def vad_predict(
-    pcm_bytes: bytes, sample_rate: int = 16000, threshold: float = 0.5
-) -> tuple[bool, float]:
-    """
-    PCMバイト列をVAD判定し、(is_speech, speech_prob)を返す
-    """
-    audio = pcm_bytes_to_float32(pcm_bytes)
-    if len(audio) == 0:
-        return False, 0.0
-    audio_tensor = torch.from_numpy(audio)
-    speech_prob = model(audio_tensor, sample_rate).item()
-    is_speech = speech_prob > threshold
-    return is_speech, speech_prob
+from app.adapters.vad import VADAdapter
 
 
 class VADProcessor:
@@ -55,11 +11,13 @@ class VADProcessor:
 
     def __init__(
         self,
+        vad_adapter: VADAdapter,
         sample_rate: int = 16000,
         pre_buffer_duration: float = 0.5,  # 500ms pre-buffer
         threshold: float = 0.3,  # より敏感な閾値
         chunk_size_ms: int = 100,  # 100ms単位で処理
     ):
+        self.vad_adapter = vad_adapter
         self.sample_rate = sample_rate
         self.pre_buffer_duration = pre_buffer_duration
         self.threshold = threshold
@@ -84,7 +42,7 @@ class VADProcessor:
             return None
 
         # VAD判定
-        is_speech, speech_prob = vad_predict(
+        is_speech, speech_prob = self.vad_adapter.predict(
             pcm_bytes, self.sample_rate, self.threshold
         )
 
@@ -134,6 +92,7 @@ class VADProcessor:
 
 
 def vad_predict_enhanced(
+    vad_adapter: VADAdapter,
     pcm_bytes: bytes,
     sample_rate: int = 16000,
     threshold: float = 0.3,  # デフォルト閾値を低く設定
@@ -141,4 +100,4 @@ def vad_predict_enhanced(
     """
     Enhanced VAD prediction with lower threshold for better speech detection
     """
-    return vad_predict(pcm_bytes, sample_rate, threshold)
+    return vad_adapter.predict(pcm_bytes, sample_rate, threshold)
