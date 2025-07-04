@@ -31,4 +31,4 @@ server-lint-fix:
 	cd server && docker compose exec api uv run ruff check --fix
 
 server-test:
-	cd server && docker compose exec api uv run pytest
+	cd server && docker compose exec api env TESTING=true uv run pytest
