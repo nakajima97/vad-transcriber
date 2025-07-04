@@ -9,8 +9,9 @@ import asyncio
 from datetime import datetime
 
 from fastapi import WebSocket, WebSocketDisconnect
-from app.services.vad_chunk import vad_predict, VADProcessor
-from app.utils.openai_transcribe import transcribe_with_gpt4o
+from app.services.vad_chunk import VADProcessor
+from app.adapters.transcription import TranscriptionAdapter
+from app.adapters.vad import VADAdapter
 from app.schemas.websocket import (
     TranscriptionModel,
     WebSocketMessageType,
@@ -250,8 +251,14 @@ class ConnectionManager:
     """WebSocket接続を管理するクラス"""
 
     def __init__(
-        self, use_vad_processor: bool = False, use_segment_merger: bool = True
+        self,
+        transcription_adapter: TranscriptionAdapter,
+        vad_adapter: VADAdapter,
+        use_vad_processor: bool = False,
+        use_segment_merger: bool = True,
     ):
+        self.transcription_adapter = transcription_adapter
+        self.vad_adapter = vad_adapter
         self.active_connections: Dict[str, WebSocket] = {}
         self.audio_data_count: Dict[str, int] = {}
         # VAD用バッファ・状態
@@ -317,6 +324,7 @@ class ConnectionManager:
         # VADProcessorを使用する場合は初期化
         if self.use_vad_processor:
             self.vad_processors[client_id] = VADProcessor(
+                vad_adapter=self.vad_adapter,
                 pre_buffer_duration=0.5,  # 500ms pre-buffer
                 threshold=0.3,  # より敏感な閾値
                 chunk_size_ms=100,  # 100ms単位で処理
@@ -489,7 +497,22 @@ class ConnectionManager:
         )
 
 
-manager = ConnectionManager()
+# manager インスタンスは関数レベルで初期化する必要があります
+manager = None
+
+
+def initialize_manager(
+    transcription_adapter: TranscriptionAdapter, vad_adapter: VADAdapter
+):
+    """ConnectionManagerを初期化"""
+    global manager
+    if manager is None:
+        manager = ConnectionManager(
+            transcription_adapter=transcription_adapter,
+            vad_adapter=vad_adapter,
+            use_vad_processor=False,
+            use_segment_merger=True,
+        )
 
 
 async def websocket_endpoint(websocket: WebSocket, client_id: str = None):
@@ -665,7 +688,7 @@ async def process_audio_data(audio_data: bytes, client_id: str):
         offset = 0
         while len(buf) - offset >= frame_bytes:
             frame = buf[offset : offset + frame_bytes]
-            is_speech, speech_prob = vad_predict(frame)
+            is_speech, speech_prob = manager.vad_adapter.predict(frame)
 
             silence_count = manager.silence_frame_count.get(client_id, 0)
             logger.info(
@@ -810,10 +833,10 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                                 selected_model = (
                                                     manager.get_client_model(client_id)
                                                 )
-                                                await transcribe_with_gpt4o(
+                                                await manager.transcription_adapter.transcribe(
                                                     wav_bytes,
-                                                    callback=transcription_callback,
                                                     model=selected_model.value,  # Enumの値を文字列として使用
+                                                    callback=transcription_callback,
                                                 )
                                             except Exception as e:
                                                 await transcription_error_callback(e)
@@ -909,10 +932,10 @@ async def process_audio_data(audio_data: bytes, client_id: str):
                                             selected_model = manager.get_client_model(
                                                 client_id
                                             )
-                                            await transcribe_with_gpt4o(
+                                            await manager.transcription_adapter.transcribe(
                                                 wav_bytes,
-                                                callback=transcription_callback,
                                                 model=selected_model.value,  # Enumの値を文字列として使用
+                                                callback=transcription_callback,
                                             )
                                         except Exception as e:
                                             await transcription_error_callback(e)

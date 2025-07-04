@@ -1,9 +1,10 @@
 import logging
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
-from app.websocket.handlers import websocket_endpoint
+from app.websocket.handlers import websocket_endpoint, initialize_manager
+from app.api.deps import get_transcription_adapter, get_vad_adapter
 
 app = FastAPI(
     title="VAD Transcriber API",
@@ -39,7 +40,13 @@ def read_root():
 
 # WebSocketエンドポイント
 @app.websocket("/ws")
-async def websocket_route(websocket: WebSocket):
+async def websocket_route(
+    websocket: WebSocket,
+    transcription_adapter=Depends(get_transcription_adapter),
+    vad_adapter=Depends(get_vad_adapter),
+):
+    # アダプターを使用してConnectionManagerを初期化
+    initialize_manager(transcription_adapter, vad_adapter)
     await websocket_endpoint(websocket)
 
 
