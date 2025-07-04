@@ -25,6 +25,7 @@ class SileroVADAdapter(VADAdapter):
         Silero VAD モデルを初期化
         """
         try:
+            # cSpell:ignore snakers silero
             self._model, self._utils = torch.hub.load(
                 repo_or_dir="snakers4/silero-vad", 
                 model="silero_vad", 
@@ -49,11 +50,11 @@ class SileroVADAdapter(VADAdapter):
             logger.error(f"VAD health check failed: {e}")
             return False
 
-    def _pcm_bytes_to_float32(self, pcm_bytes: bytes) -> np.ndarray:
+    def _pcm_bytes_to_float32(self, pcm_bytes: bytes) -> np.ndarray:  # cSpell:ignore ndarray
         """
         16bit PCMバイト列をfloat32正規化配列に変換
         """
-        audio = np.frombuffer(pcm_bytes, dtype=np.int16)
+        audio = np.frombuffer(pcm_bytes, dtype=np.int16)  # cSpell:ignore frombuffer
         audio = audio.astype(np.float32) / 32768.0
         return audio
 
