@@ -8,6 +8,7 @@ jobs:
         working-directory: ./server/api  
     env:
       OPENAI_API_KEY: test-api-key-for-github-actions
+      TESTING: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
