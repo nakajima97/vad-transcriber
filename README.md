@@ -88,7 +88,3 @@ yarn build-storybook
 4. プルリクエストの作成
 
 詳細は [ドキュメント](./docs/) を参照してください。
-
-## 📄 ライセンス
-
-MIT License
